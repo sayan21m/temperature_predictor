@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Exploratory Data Analysis</title>
+	<link href="./output.css" rel="stylesheet">
+</head>
+<body class="h-full bg-black text-white">
+    <!-- Header -->
+    <div class="flex flex-col min-h-screen">
+        <header class="header flex flex-col gap-6 border-b border-white/10 bg-slate-950 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-col">
+                <h1 class="title_header text-3xl font-bold text-cyan-300">EDA Studio</h1>
+                <p class="mt-1 text-sm text-slate-400">Explore distributions, relationships, and data quality</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <label for="search-column" class="sr-only">Search column</label>
+                <input type="text" placeholder="Search Column" class="rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-400 hover:bg-slate-800"/>
+                <button class="text-slate-400 rounded-2xl bg-slate-900 border border-white/10 px-4 py-2 text-sm hover:bg-slate-800">Theme</button>
+                <button class="rounded-2xl bg-cyan-600 border border-white/10 px-4 py-2 text-sm font-medium hover:bg-cyan-800">Export</button>
+            </div>
+        </header>
+        <!-- Main Layout -->
+        <div class="body flex flex-1 overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="sidebar w-64 border-r border-white/10 bg-slate-950 px-4 py-6">
+                <h2 class="mb-4 text-lg font-semibold">Filters</h2>
+                <div class="space-y-3 text-sm text-slate-300">
+                    <div class="rounded-lg bg-slate-900 p-3 hover:bg-slate-800">Dataset</div>
+                    <div class="rounded-lg bg-slate-900 p-3 hover:bg-slate-800">Date Range</div>
+                    <div class="rounded-lg bg-slate-900 p-3 hover:bg-slate-800">Target Column</div>
+                    <div class="rounded-lg bg-slate-900 p-3 hover:bg-slate-800">Null Toggle</div>
+                    <div class="rounded-lg bg-slate-900 p-3 hover:bg-slate-800">Correlation Threshold</div>
+                </div>
+            </aside>
+
+            <main class="main_body flex-1 overflow-y-auto bg-slate-900 p-6">
+                <!-- KPI Cards -->
+                <section class="kpi_card mb-6">
+                    <h2 class="mb-4 text-lg font-semibold">KPI Cards</h2>
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div class="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                            <p class="text-sm text-slate-400">Rows</p>
+                            <h3 class="mt-2 text-2xl font-bold">124,578</h3>
+                        </div>
+
+                        <div class="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                            <p class="text-sm text-slate-400">Missing</p>
+                            <h3 class="mt-2 text-2xl font-bold">2.4%</h3>
+                        </div>
+                        
+                        <div class="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                            <p class="text-sm text-slate-400">Outliers</p>
+                            <h3 class="mt-2 text-2xl font-bold">183</h3>
+                        </div>
+        
+                        <div class="rounded-2xl border border-white/10 bg-slate-950 p-4">
+                            <p class="text-sm text-slate-400">Features</p>
+                            <h3 class="mt-2 text-2xl font-bold">28</h3>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Main Chart -->
+                <section class="main_chart mb-6">
+                    <h2 class="mb-4 text-lg font-semibold">Main Charts</h2>
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        <div class="dist rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-[500px]">
+                            <h3 class="text-lg font-semibold">Distribution Histogram</h3>
+                            <p class="text-slate-500 mt-4">Chart will render here</p>
+                        </div>
+        
+                        <div class="corr rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-[500px]">
+                            <h3 class="text-lg font-semibold">Correlation Heatmap</h3>
+                            <p class="text-slate-500 mt-4">Chart will render here</p>
+                        </div>
+        
+                        <div class="box_plot rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-[500px]">
+                            <h3 class="text-lg font-semibold">Box plot / Outliers</h3>
+                            <p class="text-slate-500 mt-4">Chart will render here</p>
+                        </div>
+        
+                        <div class="scatter rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-[500px]">
+                            <h3 class="text-lg font-semibold">Scatter/ Pair Relation</h3>
+                            <p class="text-slate-500 mt-4">Chart will render here</p>
+                        </div>
+                    </div>
+                </section>
+                <!-- Data Preview -->
+                <section>
+                    <h2 class="mb-4 text-lg font-semibold">Data Preview</h2>
+                    <div class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-[350px]">
+                        <p class="text-slate-400">Sortable table and summary stats will appear here.</p>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+</body>
+</html>
