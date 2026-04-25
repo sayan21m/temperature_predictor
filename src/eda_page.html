@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <title>Exploratory Data Analysis</title>
     <link href="./output.css" rel="stylesheet" />
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script type="module" src="./scripts.js"></script>
   </head>
   <body class="h-full bg-black text-white">
     <!-- Header -->
@@ -67,16 +69,32 @@
           id="sidebar"
           class="w-64 min-h-screen flex flex-col gap-5 border-r border-white/10 bg-slate-950 px-4 py-6 overflow-y-auto"
         >
-          <div id="dataset-target">
-            <h2 class="mb-4 text-lg font-semibold text-gray-400">DATASET</h2>
+          <div id="dataset-select" class="flex flex-col">
+            <div id="dataset">
+              <h2 class="mb-4 text-lg font-semibold text-gray-400">FEATURE</h2>
 
-            <div class="flex flex-col space-y-3 text-sm text-slate-300">
-              <select
-                id="targetBtn"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer"
-              >
-                <option disabled selected value="">Select Column</option>
-              </select>
+              <div class="flex flex-col space-y-3 text-sm text-slate-300">
+                <select
+                  id="datasetBtn"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer"
+                >
+                  <option disabled selected value="">Select Feature</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="target-select">
+            <div id="target">
+              <h2 class="mb-4 text-lg font-semibold text-gray-400">TARGET</h2>
+
+              <div class="flex flex-col space-y-3 text-sm text-slate-300">
+                <select
+                  id="targetBtn"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer"
+                >
+                  <option disabled selected value="">Select Column</option>
+                </select>
+              </div>
             </div>
           </div>
           <div id="filters">
@@ -104,11 +122,11 @@
                 <option disabled selected value="">Station</option>
               </select>
 
-              <input
+              <!-- <input
                 id="date-filter"
                 type="date"
                 class="w-full rounded-xl bg-slate-900 px-4 py-3 border border-white/10"
-              />
+              /> -->
               <select
                 id="season-filter"
                 class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer"
@@ -141,7 +159,7 @@
                 >
                   <p class="text-sm text-slate-400">Missing</p>
                   <h3 id="missingValueCount" class="mt-2 text-2xl font-bold">
-                    2.4%
+                    0.00 %
                   </h3>
                 </div>
 
@@ -150,7 +168,7 @@
                 >
                   <p class="text-sm text-slate-400">Average Temperature</p>
                   <h3 id="avgTemperatureCount" class="mt-2 text-2xl font-bold">
-                    12
+                    0 °C
                   </h3>
                 </div>
               </div>
@@ -167,7 +185,7 @@
                 >
                   <p class="text-sm text-slate-400">Total Rainfall</p>
                   <h3 id="totalRainfallCount" class="mt-2 text-2xl font-bold">
-                    183
+                    0 mm
                   </h3>
                 </div>
 
