@@ -3,3 +3,4 @@ node_modules
 .idea/misc.xml
 data_analysis/.ipynb_checkpoints
 data_analysis/data.json
+.DS_Store
