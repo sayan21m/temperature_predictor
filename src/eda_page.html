@@ -7,13 +7,12 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script type="module" src="./scripts.js"></script>
   </head>
-  <body class="h-full bg-black text-white">
+  <body class="h-screen overflow-hidden bg-black text-white">
     <!-- Header -->
-    <div class="flex flex-col min-h-screen">
+    <div class="flex flex-col h-full">
       <header
         id="header"
-        class="flex flex-row justify-between border-b border-white/10 bg-slate-950 px-6 py-4 lg:flex-row lg:items-end lg:justify-between"
-      >
+        class="flex flex-row justify-between border-b border-white/10 bg-slate-950 px-6 py-4 lg:flex-row lg:items-end lg:justify-between sticky top-0 z-50">
         <div class="flex flex-col">
           <h1 class="title_header text-3xl font-bold text-cyan-300">
             EDA Report
@@ -67,7 +66,7 @@
         <!-- Sidebar -->
         <aside
           id="sidebar"
-          class="w-64 min-h-screen flex flex-col gap-5 border-r border-white/10 bg-slate-950 px-4 py-6 overflow-y-auto"
+          class="w-64 h-full flex flex-col gap-5 border-r border-white/10 bg-slate-950 px-4 py-6 overflow-y-auto"
         >
           <div id="dataset-select" class="flex flex-col">
             <div id="dataset">
@@ -137,7 +136,7 @@
           </div>
         </aside>
 
-        <main class="main_body flex-1 overflow-y-auto bg-slate-900 p-6">
+        <main id="main_body" class="flex-1 overflow-y-auto bg-slate-900 p-6">
           <!-- KPI Cards -->
           <section id="kpi-cards" class="kpi_card mb-6">
             <h2 class="mb-4 text-lg font-semibold">KPI Cards</h2>
@@ -194,7 +193,7 @@
                 >
                   <p class="text-sm text-slate-400">Target</p>
                   <h3 id="targetMetric" class="mt-2 text-2xl font-bold">
-                    Max Temp
+                    Target
                   </h3>
                 </div>
               </div>
@@ -207,64 +206,93 @@
             <div class="grid grid-cols-1 gap-4">
               <div
                 id="time-series-section"
-                class="dist rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125"
+                class="dist rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125 flex flex-col justify-center"
               >
                 <div class="mb-4 flex flex-col items-start justify-between">
                   <h3 class="text-lg font-semibold">Time Series Trend</h3>
-                  <p id="histChartMsg" class="text-slate-500 mt-1">
+                  <p id="trendChartMsg" class="text-slate-500 mt-1">
                     Rainfall / temperature / lag feature trend
                   </p>
                 </div>
-                <div id="histChart" class="p-3 w-full h-full"></div>
+                <div id="trendChartContainer" class="relative w-full h-full flex justify-center">
+
+                  <button id="prevTimeSeriesBtn"
+                    class="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                      class="w-6 h-6 text-white"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                
+                  <div id="timeSeriesTrendChart"
+                    class="p-3 w-450 h-full"
+                    style="transition: transform 0.35s ease, opacity 0.35s ease;">
+                  </div>
+                
+                  <button id="nextTimeSeriesBtn"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                      class="w-6 h-6 text-white"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                
+                </div>
               </div>
 
               <div
                 id="location-analysis-section"
-                class="corr rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125"
-              >
+                class="corr rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
                 <div class="mb-4 flex flex-col items-start justify-between">
                   <h3 class="text-lg font-semibold">Location Analysis</h3>
-                  <p id="corrChartMsg" class="text-slate-500 mt-1">
+                  <p id="locationChartMsg" class="text-slate-500 mt-1">
                     Station, geography, elevation, seasonal profile
                   </p>
                 </div>
-                <div
-                  class="grid grid-cols-1 md:grid-cols-1 xl:grid-cols-3 gap-4"
-                >
-                  <div
-                    id="stationChart"
-                    class="h-100 border border-white/20 rounded-2xl p-3 flex items-center justify-center text-slate-500"
-                  >
-                    Avg Temp by Station
-                  </div>
+                <div id="locationChartContainer" class="relative w-full h-full flex justify-center">
 
-                  <div
-                    id="stateChart"
-                    class="h-100 border border-white/20 rounded-2xl p-3 flex items-center justify-center text-slate-500"
-                  >
-                    Rainfall by State
+                  <button id="prevLocationBtn"
+                    class="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                      class="w-6 h-6 text-white"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                
+                  <div id="locationAnalysisChart"
+                    class="p-3 w-450 h-full"
+                    style="transition: transform 0.35s ease, opacity 0.35s ease;">
                   </div>
-
-                  <div
-                    id="elevationChart"
-                    class="h-100 border border-white/20 rounded-2xl p-3 flex items-center justify-center text-slate-500"
-                  >
-                    Elevation vs Temp
-                  </div>
+                
+                  <button id="nextLocationBtn"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                      class="w-6 h-6 text-white"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                
                 </div>
               </div>
 
               <div
                 id="distribution-section"
-                class="box_plot rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125"
-              >
+                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
                 <div class="mb-4 flex flex-col items-start justify-between">
                   <h3 class="text-lg font-semibold">Distribution & Skew</h3>
-                  <p id="boxChartMsg" class="text-slate-500 mt-1">
+                  <p id="histPlotMsg" class="text-slate-500 mt-1">
                     Histogram for selected feature
                   </p>
                 </div>
-                <div id="boxChart" class="p-3 w-full h-full"></div>
+                <div id="histogramChart" class="relative w-full h-full flex justify-center"></div>
               </div>
 
               <div
