@@ -4,6 +4,29 @@ async function loadData() {
     return data;
 }
 
+// common configuration for all plots
+var config = {
+    scrollZoom: true,
+    modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
+    displaylogo: false
+};
+
+// defining the elements
+const datasetColumn = document.getElementById('datasetBtn');
+const datasetRowCount = document.getElementById('datasetRowCount');
+const stationCount = document.getElementById('stationCount');
+const targetColumn = document.getElementById('targetBtn');
+const targetKPI = document.getElementById('targetMetric');
+const missingValuesKPI = document.getElementById('missingValueCount');
+const stateFilter = document.getElementById('state-filter');
+const districtFilter = document.getElementById('district-filter');
+const stationFilter = document.getElementById('station-filter');
+const seasonFilter = document.getElementById('season-filter');
+const totalRainfallKPI = document.getElementById('totalRainfallCount');
+const avgTempKPI = document.getElementById('avgTemperatureCount');
+
+let data;
+
 // ploting the time series graphs
 async function time_series_plot(df, id, y_title) {
     var data = {
@@ -18,12 +41,6 @@ async function time_series_plot(df, id, y_title) {
         title: 'Time Series Trend',
         xaxis: {title: 'Date', type: 'date'},
         yaxis: {title: y_title}
-    };
-
-    var config = {
-        scrollZoom: true,
-        modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
-        displaylogo: false
     };
 
     Plotly.react(id, [data], layout, config);
@@ -44,12 +61,6 @@ async function location_analysis_plot(df, id, x_title, y_title) {
         dragmode: "pan",
         xaxis: {title: x_title},
         yaxis: {title: y_title}
-    };
-
-    var config = {
-        scrollZoom: true,
-        modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
-        displaylogo: false
     };
 
     Plotly.react(id, [trace], layout, config);
@@ -95,12 +106,6 @@ async function map_plot(df, id) {
         margin: { r: 0, t: 0, b: 0, l: 0 }
     };
 
-    const config = {
-        scrollZoom: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d']
-    };
-
     Plotly.react(id, [trace], layout, config).then(gd => {
         gd.on('plotly_relayout', ev => {
             if (ev['mapbox.center']) {
@@ -142,25 +147,100 @@ async function hist_plot(df, text, id) {
         margin: { t: 30 }
     };
 
-    var config = {
-        scrollZoom: true,
-        modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
-        displaylogo: false
-    };
-
     Plotly.react(id, [trace], layout, config);
 }
 
+// box plot for outliers
+async function box_plot(df, text, id) {
+    var trace = {
+        y: df,
+        type: 'box',
+        name: text,
+        outliercolor: 'rgba(219, 64, 82, 0.6)',
+        marker: {
+            color: 'rgb(8,81,156)',
+            line: {
+                outliercolor: 'rgba(219, 64, 82, 1.0)',
+                outlierwidth: 2
+            }
+        },
+        boxpoints: 'suspectedoutliers'
+    };
+
+    const layout = {
+        dragmode: "pan",
+        margin: { t: 30 }
+    };
+      
+    Plotly.react(id, [trace], layout, config);
+}
+
+// plotting the data point - scatter plot
+async function scatter_plot(x, y, text, x_label, y_label, id) {
+    var trace = {
+        x: x,
+        y: y,
+        mode: 'markers',
+        type: 'scatter',
+        text: text,
+        marker: {
+            size: 6,
+            opacity: 0.6
+        }
+    }
+
+    const layout = {
+        dragmode: "pan",
+        margin: { t: 30 },
+        title: {
+            text: `${y_label} vs ${x_label}`
+          },
+          xaxis: {
+            title: {
+              text: x_label
+            }
+          },
+          yaxis: {
+            title: {
+              text: y_label
+            }
+          }
+    };
+      
+    Plotly.react(id, [trace], layout, config);
+}
+
+async function update_scatter() {
+    const x_col = datasetColumn.value || 'elevation';
+    const y_col = targetColumn.value || 'avg_temp';
+
+    const x = data.scatter_sample.map(i => i[x_col]);
+    const y = data.scatter_sample.map(i => i[y_col]);
+
+    // plot only numerical columns
+    if (typeof x[0] !== "number" || typeof y[0] !== "number") {
+        console.warn("Scatter only supports numerical columns");
+        return;
+    }
+
+    const text = data.scatter_sample.map(i =>
+        `${i.station_name}<br>
+         ${x_col}: ${i[x_col]}<br>
+         ${y_col}: ${i[y_col]}`
+    )
+    scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+}
+
 async function main() {
-    const data = await loadData();
+
+    // loding the data
+    data = await loadData();
 
     // setting KPI values
-    const datasetRowCount = document.getElementById('datasetRowCount');
     if (datasetRowCount) {
         datasetRowCount.textContent = data.shape[0];
     }
 
-    const stationCount = document.getElementById('stationCount');
     if (stationCount) {
         stationCount.textContent = Object.values(data.station)
         .flat()
@@ -168,7 +248,6 @@ async function main() {
     }
 
     // adding option on target dropdown
-    const targetColumn = document.getElementById('targetBtn');
     if (targetColumn) {
         let text = '<option disabled selected value="">Select Target</option>'
         for (let i of data.columns) {
@@ -178,13 +257,15 @@ async function main() {
     }
 
     // setting the data selected in target dropdown to Target KPI
-    const targetKPI = document.getElementById('targetMetric');
     targetColumn.addEventListener('change', () => {
         targetKPI.textContent = targetColumn.value;
+
+        // plotting the scatter plot of target vs feature selected in the dropdown
+        try {update_scatter();}
+        catch {window.alert("Scatterplot not available for the selected Target.");}
     });
 
     // adding option on dataset dropdown
-    const datasetColumn = document.getElementById('datasetBtn');
     if (datasetColumn) {
         let text = '<option disabled selected value="">Select Feature</option>'
         for (let i of data.columns) {
@@ -194,19 +275,23 @@ async function main() {
     }
 
     // setting the missing value count to Missing KPI on dataset dropdown change
-    const missingValuesKPI = document.getElementById('missingValueCount');
     datasetColumn.addEventListener('change', () => {
         missingValuesKPI.textContent = `${data.missing_values[datasetColumn.value].toFixed(2)} %`;
+
         // plotting the hstogram of the selected feature in dataset dropdown
-        try {
-        histogram_plots[datasetColumn.value]();
-        } catch {
-            window.alert("Histogram not available for the selected feature.");
-        }
+        try {histogram_plots[datasetColumn.value]();}
+        catch {window.alert("Histogram not available for the selected feature.");}
+
+        // plotting the boxplot of the selected feature in dataset dropdown
+        try {boxplots[datasetColumn.value]();}
+        catch {window.alert("Boxplot not available for the selected feature.")}
+
+        // plotting the scatter plot of target vs feature selected in the dropdown
+        try {update_scatter();}
+        catch {window.alert("Scatterplot not available for the selected Target.");}
     });
 
     // adding option on state, district, station and season dropdown
-    const stateFilter = document.getElementById('state-filter');
     if (stateFilter) {
         let text = '<option disabled selected value="">State</option>'
         for (let i of data.state) {
@@ -215,27 +300,22 @@ async function main() {
         stateFilter.innerHTML = text;
     }
 
-    const districtFilter = document.getElementById('district-filter');
     if (districtFilter && stateFilter) {
         let text = '<option disabled selected value="">District</option>'
         districtFilter.innerHTML = text;
     }
 
-    const stationFilter = document.getElementById('station-filter');
     if (stationFilter && districtFilter) {
         let text = '<option disabled selected value="">Station</option>'
         stationFilter.innerHTML = text;
     }
 
-    const seasonFilter = document.getElementById('season-filter');
     if (seasonFilter && stationFilter) {
         let text = '<option disabled selected value="">Season</option>'
         seasonFilter.innerHTML = text;
     }
 
     // changing option on district, station and season dropdown and setting the values in avg temperature and total rainfall kpi according to the filter selected
-    const totalRainfallKPI = document.getElementById('totalRainfallCount');
-    const avgTempKPI = document.getElementById('avgTemperatureCount');
 
     stateFilter.addEventListener('change', () => {
         if (districtFilter && stateFilter.value) {
@@ -351,8 +431,25 @@ async function main() {
         'rainfall' : () => hist_plot(data.rainfall_hist, 'Total Rainfall (mm)', 'histogramChart'),
         'wind_speed' : () => hist_plot(data.wind_speed_hist, 'Wind Speed (m/s)', 'histogramChart'),
         'air_pressure' : () => hist_plot(data.air_pressure_hist, 'Air Pressure (hPa)', 'histogramChart'),
-    }
+    };
     histogram_plots['avg_temp']();
+
+    // plotting boxplot of the selected feature in dataset dropdown and executed in the dropdown change event
+    const boxplots = {
+        'avg_temp': () => box_plot(data.boxplot['avg_temp'], 'Avgerage Temperature (°C)', 'boxPlotChart'),
+        'min_temp': () => box_plot(data.boxplot['min_temp'], 'Minimum Temperature (°C)', 'boxPlotChart'),
+        'max_temp': () => box_plot(data.boxplot['max_temp'], 'Maximum Temperature (°C)', 'boxPlotChart'),
+        'rainfall': () => box_plot(data.boxplot['rainfall'], 'Total Rainfall (mm)', 'boxPlotChart'),
+        'wind_speed': () => box_plot(data.boxplot['wind_speed'], 'Wind Speed (m/s)', 'boxPlotChart'),
+        'air_pressure': () => box_plot(data.boxplot['air_pressure'], 'Air Pressure (hPa)', 'boxPlotChart'),
+    };
+    boxplots['avg_temp']();
+
+    // plotting scatterplot of the selected feature vs selected target from the dropdown and executed in the dropdown change event
+    const scatter_plots = [() => scatter_plot(data.scatter_sample.map(i => i.elevation), data.scatter_sample.map(i => i.avg_temp), data.scatter_sample.map(i => `${i.station_name}`), "elevation", "avg_temp", "scatterRelationChart")];
+    scatter_plots[0]();
+
+    
 }
 
 main();
