@@ -26,9 +26,10 @@ const totalRainfallKPI = document.getElementById('totalRainfallCount');
 const avgTempKPI = document.getElementById('avgTemperatureCount');
 
 let data;
+let mapListenerAttached = false;
 
 // ploting the time series graphs
-async function time_series_plot(df, id, y_title) {
+function time_series_plot(df, id, y_title) {
     var data = {
         x: df[0].map(d => new Date(d)),
         y: df[1],
@@ -47,7 +48,7 @@ async function time_series_plot(df, id, y_title) {
 }
 
 // ploting the location analysis graphs
-async function location_analysis_plot(df, id, x_title, y_title) {
+function location_analysis_plot(df, id, x_title, y_title) {
     const entries = Object.entries(df)
     .sort((a, b) => b[1] - a[1]);
 
@@ -67,7 +68,7 @@ async function location_analysis_plot(df, id, x_title, y_title) {
 }
 
 // plotting the coordinates on the map 
-async function map_plot(df, id) {
+function map_plot(df, id) {
     const lat = df.map(d => d.latitude);
     const lon = df.map(d => d.longitude);
     const temp = df.map(d => d.avg_temp);
@@ -107,18 +108,21 @@ async function map_plot(df, id) {
     };
 
     Plotly.react(id, [trace], layout, config).then(gd => {
-        gd.on('plotly_relayout', ev => {
-            if (ev['mapbox.center']) {
-                Plotly.relayout(id, {
-                    'mapbox.center.lat': 22.5
-                });
-            }
-        });
+        if (!mapListenerAttached) {
+            mapListenerAttached = true;
+            gd.on('plotly_relayout', ev => {
+                if (ev['mapbox.center']) {
+                    Plotly.relayout(id, {
+                        'mapbox.center.lat': 22.5
+                    });
+                }
+            });
+        }
     });
 }
 
 // plotting the histogram 
-async function hist_plot(df, text, id) {
+function hist_plot(df, text, id) {
     const counts = df.count;
     const bins = df.bins;
 
@@ -151,7 +155,7 @@ async function hist_plot(df, text, id) {
 }
 
 // box plot for outliers
-async function box_plot(df, text, id) {
+function box_plot(df, text, id) {
     var trace = {
         y: df,
         type: 'box',
@@ -176,7 +180,7 @@ async function box_plot(df, text, id) {
 }
 
 // plotting the data point - scatter plot
-async function scatter_plot(x, y, text, x_label, y_label, id) {
+function scatter_plot(x, y, text, x_label, y_label, id) {
     var trace = {
         x: x,
         y: y,
@@ -231,6 +235,58 @@ async function update_scatter() {
     scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
 }
 
+// filtered scatter plot based on the state selected in the dropdown
+function update_scatter_state() {
+    const x_col = datasetColumn.value || 'elevation';
+    const y_col = targetColumn.value || 'avg_temp';
+    const filter = stateFilter.value
+
+    const filtered = data.scatter_sample.filter(i => i.state === filter);
+    const x = filtered.map(i => i[x_col]);
+    const y = filtered.map(i => i[y_col]);
+
+    // plot only numerical columns
+    if (typeof x[0] !== "number" || typeof y[0] !== "number") {
+        console.warn("Scatter only supports numerical columns");
+        return;
+    }
+
+    const text = filtered.map(i =>
+        `${i.station_name}<br>
+         ${x_col}: ${i[x_col]}<br>
+         ${y_col}: ${i[y_col]}`
+    )
+    scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+}
+
+// filtered scatter plot based on the season selected in the dropdown
+function update_scatter_season() {
+    const x_col = datasetColumn.value || 'elevation';
+    const y_col = targetColumn.value || 'avg_temp';
+    const filter = seasonFilter.value
+    const filterState = stateFilter.value || null;
+
+    let filtered;
+    if (filterState) filtered = data.scatter_sample.filter(i => i.season === filter && i.state === filterState);
+    else filtered = data.scatter_sample.filter(i => i.season === filter);
+    
+    const x = filtered.map(i => i[x_col]);
+    const y = filtered.map(i => i[y_col]);
+    const text = filtered.map(i =>
+        `${i.station_name}<br>
+            ${x_col}: ${i[x_col]}<br>
+            ${y_col}: ${i[y_col]}`
+    )
+
+    // plot only numerical columns
+    if (typeof x[0] !== "number" || typeof y[0] !== "number") {
+        window.alert("Scatter only supports numerical columns");
+        return;
+    }
+
+    scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+}
+
 async function main() {
 
     // loding the data
@@ -249,10 +305,7 @@ async function main() {
 
     // adding option on target dropdown
     if (targetColumn) {
-        let text = '<option disabled selected value="">Select Target</option>'
-        for (let i of data.columns) {
-            text += `<option value="${i}">${i}</option>`;
-        }
+        let text = ['<option disabled selected value="">Select Target</option>', ...data.columns.map(i => `<option value="${i}">${i}</option>`)].join('');
         targetColumn.innerHTML = text;
     }
 
@@ -267,10 +320,7 @@ async function main() {
 
     // adding option on dataset dropdown
     if (datasetColumn) {
-        let text = '<option disabled selected value="">Select Feature</option>'
-        for (let i of data.columns) {
-            text += `<option value="${i}">${i}</option>`;
-        }
+        let text = ['<option disabled selected value="">Select Feature</option>', ...data.columns.map(i => `<option value="${i}">${i}</option>`)].join('');
         datasetColumn.innerHTML = text;
     }
 
@@ -293,10 +343,7 @@ async function main() {
 
     // adding option on state, district, station and season dropdown
     if (stateFilter) {
-        let text = '<option disabled selected value="">State</option>'
-        for (let i of data.state) {
-            text += `<option value="${i}">${i}</option>`;
-        }
+        let text = ['<option disabled selected value="">State</option>', ...data.state.map(i => `<option value="${i}">${i}</option>`)].join('');
         stateFilter.innerHTML = text;
     }
 
@@ -311,7 +358,7 @@ async function main() {
     }
 
     if (seasonFilter && stationFilter) {
-        let text = '<option disabled selected value="">Season</option>'
+        let text = ['<option disabled selected value="">Season</option>', ...data.season_values.map(i => `<option value="${i}">${i}</option>`)].join('');
         seasonFilter.innerHTML = text;
     }
 
@@ -319,22 +366,17 @@ async function main() {
 
     stateFilter.addEventListener('change', () => {
         if (districtFilter && stateFilter.value) {
-            let text = '<option disabled selected value="">District</option>'
-            for (let i of data.district[stateFilter.value]) {
-                text += `<option value="${i}">${i}</option>`;
-            }
+            let text = ['<option disabled selected value="">District</option>', ...data.district[stateFilter.value].map(i => `<option value="${i}">${i}</option>`)].join('');
             districtFilter.innerHTML = text;
             totalRainfallKPI.textContent = `${data.state_rainfall[stateFilter.value].toFixed(2)} mm`;
             avgTempKPI.textContent = `${data.state_avg_temp[stateFilter.value].toFixed(2)} °C`;
+            update_scatter_state();
         }
     });
 
     districtFilter.addEventListener('change', () => {
         if (stationFilter && districtFilter.value) {
-            let text = '<option disabled selected value="">Station</option>'
-            for (let i of data.station[districtFilter.value]) {
-                text += `<option value="${i}">${i}</option>`;
-            }
+            let text = ['<option disabled selected value="">Station</option>', ...data.station[districtFilter.value].map(i => `<option value="${i}">${i}</option>`)].join('');
             stationFilter.innerHTML = text;
             totalRainfallKPI.textContent = `${data.district_rainfall[stateFilter.value][districtFilter.value].toFixed(2)} mm`;
             avgTempKPI.textContent = `${data.district_avg_temp[stateFilter.value][districtFilter.value].toFixed(2)} °C`;
@@ -343,10 +385,7 @@ async function main() {
 
     stationFilter.addEventListener('change', () => {
         if (seasonFilter && stationFilter.value) {
-            let text = '<option disabled selected value="">Season</option>'
-            for (let i of data.season[stationFilter.value]) {
-                text += `<option value="${i}">${i}</option>`;
-            }
+            let text = ['<option disabled selected value="">Season</option>', ...data.season[stationFilter.value].map(i => `<option value="${i}">${i}</option>`)].join('');
             seasonFilter.innerHTML = text;
             totalRainfallKPI.textContent = `${data.station_rainfall[stateFilter.value][districtFilter.value][stationFilter.value].toFixed(2)} mm`;
             avgTempKPI.textContent = `${data.station_avg_temp[stateFilter.value][districtFilter.value][stationFilter.value].toFixed(2)} °C`;
@@ -355,13 +394,18 @@ async function main() {
 
     seasonFilter.addEventListener('change', () => {
         if (seasonFilter.value) {
-            totalRainfallKPI.textContent = `${data.season_rainfall[stateFilter.value][districtFilter.value][stationFilter.value][seasonFilter.value].toFixed(2)} mm`;
-            avgTempKPI.textContent = `${data.season_avg_temp[stateFilter.value][districtFilter.value][stationFilter.value][seasonFilter.value].toFixed(2)} °C`;
+            if (stateFilter.value && districtFilter.value && stationFilter.value) {
+                totalRainfallKPI.textContent = `${data.season_rainfall[stateFilter.value][districtFilter.value][stationFilter.value][seasonFilter.value].toFixed(2)} mm`;
+                avgTempKPI.textContent = `${data.season_avg_temp[stateFilter.value][districtFilter.value][stationFilter.value][seasonFilter.value].toFixed(2)} °C`;
+            }
+            update_scatter_season();
+        } else {
+            update_scatter();
         }
     });
 
     // plotting time series trend
-    let time_searies_plot_idx = 0;
+    let time_series_plot_idx = 0;
     const time_series_plots = [
         () => time_series_plot(data.avg_temp_time, 'timeSeriesTrendChart', 'Average Temperature (°C)'),
         () => time_series_plot(data.min_temp_time, 'timeSeriesTrendChart', 'Minimum Temperature (°C)'),
@@ -371,18 +415,18 @@ async function main() {
         () => time_series_plot(data.rainfall_time, 'timeSeriesTrendChart', 'Total Rainfall (mm)'),
     ];
 
-    time_series_plots[time_searies_plot_idx]();
+    time_series_plots[time_series_plot_idx]();
 
     const prevBtn = document.getElementById('prevTimeSeriesBtn');
-    prevBtn.addEventListener('click', async () => {
-        time_searies_plot_idx = (time_searies_plot_idx - 1 + time_series_plots.length) % time_series_plots.length;
-        await time_series_plots[time_searies_plot_idx]();
+    prevBtn.addEventListener('click', () => {
+        time_series_plot_idx = (time_series_plot_idx - 1 + time_series_plots.length) % time_series_plots.length;
+        time_series_plots[time_series_plot_idx]();
     });
     
     const nextBtn = document.getElementById('nextTimeSeriesBtn');
-    nextBtn.addEventListener('click', async () => {
-        time_searies_plot_idx = (time_searies_plot_idx + 1) % time_series_plots.length;
-        await time_series_plots[time_searies_plot_idx]();
+    nextBtn.addEventListener('click', () => {
+        time_series_plot_idx = (time_series_plot_idx + 1) % time_series_plots.length;
+        time_series_plots[time_series_plot_idx]();
     });
 
     // plotting location analysis chart
@@ -412,15 +456,15 @@ async function main() {
     location_analysis_plots[location_analysis_plot_idx]();
 
     const prevLocationBtn = document.getElementById('prevLocationBtn');
-    prevLocationBtn.addEventListener('click', async () => {
+    prevLocationBtn.addEventListener('click', () => {
         location_analysis_plot_idx = (location_analysis_plot_idx - 1 + location_analysis_plots.length) % location_analysis_plots.length;
-        await location_analysis_plots[location_analysis_plot_idx]();
+        location_analysis_plots[location_analysis_plot_idx]();
     });
     
     const nextLocationBtn = document.getElementById('nextLocationBtn');
-    nextLocationBtn.addEventListener('click', async () => {
+    nextLocationBtn.addEventListener('click', () => {
         location_analysis_plot_idx = (location_analysis_plot_idx + 1) % location_analysis_plots.length;
-        await location_analysis_plots[location_analysis_plot_idx]();
+        location_analysis_plots[location_analysis_plot_idx]();
     });
 
     // plotting histogram of the selected feature in dataset dropdown and executed in the dropdown change event
@@ -446,8 +490,9 @@ async function main() {
     boxplots['avg_temp']();
 
     // plotting scatterplot of the selected feature vs selected target from the dropdown and executed in the dropdown change event
-    const scatter_plots = [() => scatter_plot(data.scatter_sample.map(i => i.elevation), data.scatter_sample.map(i => i.avg_temp), data.scatter_sample.map(i => `${i.station_name}`), "elevation", "avg_temp", "scatterRelationChart")];
-    scatter_plots[0]();
+    // const scatter_plots = [() => scatter_plot(data.scatter_sample.map(i => i.elevation), data.scatter_sample.map(i => i.avg_temp), data.scatter_sample.map(i => `${i.station_name}`), "elevation", "avg_temp", "scatterRelationChart")];
+    // scatter_plots[0]();
+    update_scatter();
 
     
 }
