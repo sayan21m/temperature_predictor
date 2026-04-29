@@ -223,7 +223,7 @@ async function update_scatter() {
 
     // plot only numerical columns
     if (typeof x[0] !== "number" || typeof y[0] !== "number") {
-        console.warn("Scatter only supports numerical columns");
+        window.alert("Scatter only supports numerical columns");
         return;
     }
 
@@ -287,6 +287,91 @@ function update_scatter_season() {
     scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
 }
 
+// plotting the correlation heatmap
+async function corr_heatmap(df, id) {
+    const trace = {
+        z: df.values,
+        x: df.columns,
+        y: df.columns,
+        type: 'heatmap',
+        colorscale: 'RdBu',
+        zmin: -1,
+        zmax: 1,
+        text: df.values,
+        texttemplate: "%{text:.2f}",
+        textfont: {
+            color: "black",
+            size: 10
+        }
+    };
+
+    const layout = {
+        title: "Correlation Heatmap",
+        dragmode: "pan"
+    };
+
+    Plotly.react(id, [trace], layout, config);
+}
+
+// plotting target correlation with the column selected in the target dropdown
+function target_corr_plot(feature, values, id, target) {
+    const trace = {
+        x: feature,
+        y: values,
+        type: 'bar',
+        marker: {
+            color: values.map(v => v > 0 ? '#22c55e' : '#ef4444') // green/red
+        }
+    };
+
+    const layout = {
+        title: `Correlation with ${target}`,
+        xaxis: { title: "Features" },
+        yaxis: { title: "Correlation", range: [-1, 1] },
+        dragmode: "pan"
+    };
+
+    Plotly.react(id, [trace], layout, config);
+}
+
+// plotting the monthly trend of the selected target in the target dropdown
+function monthly_trend_plot(xValue, yValue, id) {
+    let trace = {
+        x: xValue,
+        y: yValue,
+        type: 'bar',
+        text: yValue.map(i => String(i.toFixed(2))),
+        textposition: 'auto',
+        hoverinfo: 'none',
+        marker: {
+            color: 'rgb(158,202,225)',
+            opacity: 0.6,
+            line: {
+                color: 'rgb(8,48,107)',
+                width: 1.5
+            }
+        }
+    };
+
+    var layout = {
+        title: {
+          text: `Monthly Trend of ${targetColumn.value || 'avg_temp'}`
+        },
+        barmode: 'stack',
+        barcornerradius: 15,
+      };
+
+    Plotly.react(id, [trace], layout, config);
+}
+
+ function update_monthly_trend() {
+    let xVal = data.monthly_trend.map(i => i.month);
+    let targetCol = targetColumn.value || 'avg_temp';
+    let yVal = data.monthly_trend.map(i => i[targetCol]);
+
+    monthly_trend_plot(xVal, yVal, 'monthlyTrendChart');
+ }
+
 async function main() {
 
     // loding the data
@@ -316,6 +401,18 @@ async function main() {
         // plotting the scatter plot of target vs feature selected in the dropdown
         try {update_scatter();}
         catch {window.alert("Scatterplot not available for the selected Target.");}
+
+        // plotting the target correlation with other features
+        try {
+            const target_index = data.corr.columns.indexOf(targetColumn.value);
+            const feature = data.corr.columns.filter(i => i !== targetColumn.value);
+            const values = data.corr.values[target_index].filter(i => data.corr.values[target_index].indexOf(i) !== target_index);
+            target_corr_plot(feature, values, targetCorrChart, targetColumn.value);
+        } catch {window.alert("Correlation plot not available for the selected Target.");}
+
+        try {
+            update_monthly_trend();
+        } catch {window.alert("Monthly trend plot not available for the selected Target.");}
     });
 
     // adding option on dataset dropdown
@@ -490,9 +587,20 @@ async function main() {
     boxplots['avg_temp']();
 
     // plotting scatterplot of the selected feature vs selected target from the dropdown and executed in the dropdown change event
-    // const scatter_plots = [() => scatter_plot(data.scatter_sample.map(i => i.elevation), data.scatter_sample.map(i => i.avg_temp), data.scatter_sample.map(i => `${i.station_name}`), "elevation", "avg_temp", "scatterRelationChart")];
-    // scatter_plots[0]();
     update_scatter();
+
+    // plotting the correlation heatmap
+    corr_heatmap(data.corr, 'heatmapChart');
+
+    // plotting the target correlation with other features
+    const target_index = data.corr.columns.indexOf('avg_temp');
+    const feature = data.corr.columns.filter(i => i !== 'avg_temp');
+    const values = data.corr.values[target_index].filter(i => data.corr.values[target_index].indexOf(i) !== target_index);
+    target_corr_plot(feature, values, targetCorrChart, 'avg_temp')
+
+    // plotting the monthly trend and change according to the target dropdown change
+    // monthly_trend_plot(data.monthly_trend.map(i => i.month), data.monthly_trend.map(i => i.avg_temp), 'monthlyTrendChart');
+    update_monthly_trend();
 
     
 }
