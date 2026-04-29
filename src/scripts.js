@@ -24,9 +24,18 @@ const stationFilter = document.getElementById('station-filter');
 const seasonFilter = document.getElementById('season-filter');
 const totalRainfallKPI = document.getElementById('totalRainfallCount');
 const avgTempKPI = document.getElementById('avgTemperatureCount');
+const dataStat = document.getElementById('dataStatChart');
+const dataStatTable = document.getElementById('dataStatTable');
+const datasetTable = document.getElementById('dataPreviewTable');
 
 let data;
 let mapListenerAttached = false;
+
+// declaring sorting flags
+let currentSort = {
+    column: null,
+    asc: true
+};
 
 // ploting the time series graphs
 function time_series_plot(df, id, y_title) {
@@ -364,13 +373,34 @@ function monthly_trend_plot(xValue, yValue, id) {
     Plotly.react(id, [trace], layout, config);
 }
 
- function update_monthly_trend() {
+function update_monthly_trend() {
     let xVal = data.monthly_trend.map(i => i.month);
     let targetCol = targetColumn.value || 'avg_temp';
     let yVal = data.monthly_trend.map(i => i[targetCol]);
 
     monthly_trend_plot(xVal, yVal, 'monthlyTrendChart');
- }
+}
+
+// render the sorted dataset
+function update_table(dataset) {
+    let dataTableHead = ['<thead class="bg-slate-800 sticky top-0 z-10">',
+        "<tr>",
+        ...data.columns.map((k, l) => `<th onclick="sortTable(${l})" class="px-4 py-2 border-b border-slate-600 cursor-pointer hover:bg-slate-700 select-none">${k}</th>`),
+        "</tr>",
+        "</thead>"];
+
+    let dataTableBody = ['<tbody class="overflow-hidden">']
+    for (let row of dataset) {
+        let rowVal = ['<tr class="bg-slate-900">']
+        let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-700">${m}</td>`)
+        rowVal.push(...rowEntry);
+        rowVal.push("</tr>");
+        dataTableBody.push(...rowVal);
+    }
+    dataTableHead.push(...dataTableBody);
+    dataTableHead = dataTableHead.join('');
+    datasetTable.innerHTML = dataTableHead;
+}
 
 async function main() {
 
@@ -599,9 +629,60 @@ async function main() {
     target_corr_plot(feature, values, targetCorrChart, 'avg_temp')
 
     // plotting the monthly trend and change according to the target dropdown change
-    // monthly_trend_plot(data.monthly_trend.map(i => i.month), data.monthly_trend.map(i => i.avg_temp), 'monthlyTrendChart');
     update_monthly_trend();
 
+    // displaying the data stats
+    let statHead = ['<thead class="bg-slate-800 sticky top-0 z-10">', "<tr>", ...Object.keys(data.stats[0]).map(k => `<th class="px-4 py-2 border-b border-slate-600">${k}</th>`), "</tr>", "</thead>"];
+
+    let statBody = ["<tbody>"]
+    for (let row of data.stats) {
+        let rowVal = ['<tr class="bg-slate-900">']
+        let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-700">${m}</td>`)
+        rowVal.push(...rowEntry);
+        statBody.push(...rowVal);
+    }
+
+    statHead.push(...statBody);
+    statHead = statHead.join('');
+    dataStatTable.innerHTML = statHead;
+
+    // display the data table
+    update_table(data.scatter_sample.slice(0, 50));
+
+    window.sortTable = function(colIdx) {
+        let col = data.columns[colIdx];
+
+        if (currentSort.column === col) {
+            currentSort.asc = !(currentSort.asc);
+        } else {
+            currentSort.column = col;
+            currentSort.asc = true;
+        }
+
+        let sortedData = data.scatter_sample.slice(0, 50).sort((a, b) => {
+            let valA = a[col];
+            let valB = b[col];
+
+            // sorting the numerical values
+            const numA = parseFloat(valA);
+            const numB = parseFloat(valB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return currentSort.asc ? numA - numB : numB - numA;
+            }
+
+            const dateA = new Date(valA).getTime();
+            const dateB = new Date(valB).getTime();
+            if (!isNaN(dateA) && !isNaN(dateB)) {
+                return currentSort.asc ? dateA - dateB : dateB - dateA;
+            }
+
+            return currentSort.asc
+            ? String(valA).localeCompare(String(valB))
+            : String(valB).localeCompare(String(valA));
+        });
+        
+        update_table(sortedData);
+    }
     
 }
 
