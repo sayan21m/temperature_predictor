@@ -2,7 +2,7 @@ async function loadData() {
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) overlay.style.display = 'flex';
     try {
-        const response = await fetch('../data_analysis/data.json');
+        const response = await fetch('./data.json');
         const data = await response.json();
         return data;
     } finally {
