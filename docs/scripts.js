@@ -361,6 +361,7 @@ function monthly_trend_plot(xValue, yValue, id) {
         title: {
           text: `Monthly Trend of ${targetColumn.value || 'avg_temp'}`
         },
+        dragmode: "pan",
         barmode: 'stack',
         barcornerradius: 15,
       };
