@@ -266,7 +266,7 @@ try:
         "kurtosis": kurt,
     }
 
-    with open('data.json', 'w') as f:
+    with open('../src/data.json', 'w') as f:
         json.dump(data, f, cls=CompactEncoder, indent=4, default=str)
 
     print("Data dumped successfully!")
