@@ -27,6 +27,42 @@ class CompactEncoder(json.JSONEncoder):
             return
         yield from super().iterencode(obj, **kw)
 
+state_mapping = {
+    'JK': 'Jammu and Kashmir',
+    'PB': 'Punjab',
+    'HP': 'Himachal Pradesh',
+    'HR': 'Haryana',
+    'CH': 'Chandigarh',
+    'UP': 'Uttar Pradesh',
+    'RJ': 'Rajasthan',
+    'DL': 'Delhi',
+    'AR': 'Arunachal Pradesh',
+    'WB': 'West Bengal',
+    'SK': 'Sikkim',
+    'AS': 'Assam',
+    'MP': 'Madhya Pradesh',
+    'BR': 'Bihar',
+    'ML': 'Meghalaya',
+    'NL': 'Nagaland',
+    'GJ': 'Gujarat',
+    'TR': 'Tripura',
+    'MN': 'Manipur',
+    'MZ': 'Mizoram',
+    'OR': 'Odisha',
+    'MH': 'Maharashtra',
+    'CT': 'Chhattisgarh',
+    'DD': 'Daman and Diu',
+    'KA': 'Karnataka',
+    'AP': 'Andhra Pradesh',
+    'GA': 'Goa',
+    'TN': 'Tamil Nadu',
+    'LD': 'Lakshadweep',
+    'AN': 'Andaman and Nicobar Islands',
+    'KL': 'Kerala',
+    'PY': 'Puducherry'
+}
+df['state'] = df['state'].map(state_mapping)
+
 try:
     missing_values = {}
     null_count = df.isnull().sum()
@@ -266,10 +302,11 @@ try:
         "kurtosis": kurt,
     }
 
-    with open('../src/data.json', 'w') as f:
+    with open('../docs/data.json', 'w') as f:
         json.dump(data, f, cls=CompactEncoder, indent=4, default=str)
 
     print("Data dumped successfully!")
 
-except:
+except Exception as e:
     print("Data dump failed")
+    print("Error:", e)
