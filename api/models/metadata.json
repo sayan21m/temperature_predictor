@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-07-02T05:45:45.675069Z",
+  "trained_at": "2026-07-02T13:50:15.604669+00:00",
   "feature_cols": [
     "year",
     "sin_day",
@@ -14,7 +14,16 @@
     "season",
     "state",
     "district",
-    "station_name"
+    "station_name",
+    "temp_lag_1",
+    "temp_lag_3",
+    "temp_lag_7",
+    "temp_max_lag_1",
+    "temp_max_lag_3",
+    "temp_max_lag_7",
+    "rain_lag_1",
+    "rain_lag_3",
+    "rain_lag_7"
   ],
   "target_cols": [
     "avg_temp",
@@ -30,7 +39,16 @@
     "air_pressure",
     "elevation",
     "latitude",
-    "longitude"
+    "longitude",
+    "temp_lag_1",
+    "temp_lag_3",
+    "temp_lag_7",
+    "temp_max_lag_1",
+    "temp_max_lag_3",
+    "temp_max_lag_7",
+    "rain_lag_1",
+    "rain_lag_3",
+    "rain_lag_7"
   ],
   "categorical_features": [
     "month",
@@ -45,23 +63,23 @@
     "avg_temp": {
       "train_rows": 805740,
       "test_rows": 164599,
-      "mae": 1.2866137924359797,
-      "rmse": 1.701821770554098,
-      "r2": 0.9147475552248064
+      "mae": 0.6616800116919861,
+      "rmse": 0.9332739349467144,
+      "r2": 0.9743612430456728
     },
     "min_temp": {
       "train_rows": 761924,
       "test_rows": 164517,
-      "mae": 1.4080169958743567,
-      "rmse": 1.8927174318083524,
-      "r2": 0.911495264321399
+      "mae": 0.9555567233972653,
+      "rmse": 1.2945261425046153,
+      "r2": 0.9585984504398154
     },
     "max_temp": {
       "train_rows": 695495,
       "test_rows": 164246,
-      "mae": 1.6647500771003783,
-      "rmse": 2.190869089820053,
-      "r2": 0.8547514939747525
+      "mae": 1.005313432804851,
+      "rmse": 1.384546681842234,
+      "r2": 0.9419911809449614
     }
   }
 }

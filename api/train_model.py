@@ -46,12 +46,16 @@ STATE_MAPPING = {
 FEATURE_COLS = [
     "year", "sin_day", "cos_day", "rainfall", "wind_speed", "air_pressure",
     "elevation", "latitude", "longitude", "month", "season", "state",
-    "district", "station_name",
+    "district", "station_name", "temp_lag_1", "temp_lag_3", "temp_lag_7",
+    "temp_max_lag_1", "temp_max_lag_3", "temp_max_lag_7",
+    "rain_lag_1", "rain_lag_3", "rain_lag_7"
 ]
 TARGET_COLS = ["avg_temp", "min_temp", "max_temp"]
 NUMERIC_FEATURES = [
     "year", "sin_day", "cos_day", "rainfall", "wind_speed", "air_pressure",
-    "elevation", "latitude", "longitude",
+    "elevation", "latitude", "longitude", "temp_lag_1", "temp_lag_3", "temp_lag_7",
+    "temp_max_lag_1", "temp_max_lag_3", "temp_max_lag_7",
+    "rain_lag_1", "rain_lag_3", "rain_lag_7"
 ]
 CATEGORICAL_FEATURES = ["month", "season", "state", "district", "station_name"]
 
@@ -101,6 +105,18 @@ def main():
     df["year"] = df["date_of_record"].dt.year
     df["sin_day"] = np.sin(2 * np.pi * df["day_of_year"] / 365.25)
     df["cos_day"] = np.cos(2 * np.pi * df["day_of_year"] / 365.25)
+
+    df["temp_lag_1"] = df['avg_temp'].shift(1)
+    df["temp_lag_3"] = df['avg_temp'].shift(3)
+    df["temp_lag_7"] = df['avg_temp'].shift(7)
+
+    df["temp_max_lag_1"] = df['max_temp'].shift(1)
+    df["temp_max_lag_3"] = df['max_temp'].shift(3)
+    df["temp_max_lag_7"] = df['max_temp'].shift(7)
+
+    df["rain_lag_1"] = df['rainfall'].shift(1)
+    df["rain_lag_3"] = df['rainfall'].shift(3)
+    df["rain_lag_7"] = df['rainfall'].shift(7)
 
     df = df.sort_values("date_of_record")
     train = df[df["date_of_record"] < CUTOFF_DATE]
