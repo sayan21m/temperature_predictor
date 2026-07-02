@@ -45,11 +45,11 @@ function themeLayout(layout = {}) {
     return layout;
 }
 
+// this is a simple 2-bar comparison chart, not something users need to zoom/pan;
+// the modebar just gets in the way (and overlaps the chart) on narrow screens
 const plotlyConfig = {
-    scrollZoom: true,
     responsive: true,
-    modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
-    displaylogo: false
+    displayModeBar: false
 };
 
 window.applyPredictionChartTheme = function () {
@@ -419,9 +419,9 @@ async function main() {
 
         const layout = {
             barmode: 'group',
-            margin: { t: 20 },
+            margin: { t: 20, b: 50, l: 45, r: 15 },
             yaxis: { title: 'Temperature (°C)' },
-            legend: { orientation: 'h', y: -0.15 }
+            legend: { orientation: 'h', y: -0.2 }
         };
 
         Plotly.react('comparisonChart', traces, themeLayout(layout), plotlyConfig);

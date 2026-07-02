@@ -43,8 +43,9 @@
             </svg>
           </button>
           <div class="min-w-0">
-            <h1 class="title_header truncate text-xl font-bold text-cyan-600 sm:text-2xl lg:text-3xl dark:text-cyan-300">
-              EDA Report
+            <h1 class="title_header truncate text-lg font-bold text-cyan-600 sm:text-2xl lg:text-3xl dark:text-cyan-300">
+              <span class="sm:hidden">EDA</span>
+              <span class="hidden sm:inline">EDA Report</span>
             </h1>
             <p class="mt-0.5 hidden truncate text-xs text-slate-500 sm:block sm:text-sm dark:text-slate-400">
               Explore distributions, relationships, and data quality
@@ -101,8 +102,12 @@
 
           <button
             id="exportBtn"
-            class="rounded-2xl border border-cyan-600/20 bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-700 hover:cursor-pointer sm:px-4">
-            Export
+            title="Export data"
+            class="inline-flex items-center gap-2 rounded-2xl border border-cyan-600/20 bg-cyan-600 px-2 py-2 text-sm font-medium text-white hover:bg-cyan-700 hover:cursor-pointer sm:px-4">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 sm:hidden">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            <span class="hidden sm:inline">Export</span>
           </button>
         </div>
       </header>
@@ -112,12 +117,14 @@
         <!-- Mobile overlay -->
         <div
           id="sidebarOverlay"
-          class="fixed inset-0 z-30 hidden bg-black/50 backdrop-blur-sm lg:hidden"></div>
+          class="fixed inset-0 z-55 hidden bg-black/50 backdrop-blur-sm lg:hidden"></div>
 
-        <!-- Sidebar -->
+        <!-- Sidebar: on mobile this is a full-height drawer that sits above the
+             sticky header (z-60 > header's z-50), so its close button is never
+             hidden underneath the header -->
         <aside
           id="sidebar"
-          class="fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-300 ease-in-out lg:static lg:z-0 lg:w-64 lg:translate-x-0 dark:border-white/10 dark:bg-slate-950">
+          class="fixed inset-y-0 left-0 z-60 flex w-72 -translate-x-full flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-300 ease-in-out lg:static lg:z-0 lg:w-64 lg:translate-x-0 dark:border-white/10 dark:bg-slate-950">
           <div class="flex items-center justify-between lg:hidden">
             <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Controls</h2>
             <button
