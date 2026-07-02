@@ -1,7 +1,16 @@
-.idea
-node_modules
-.idea/misc.xml
-data_analysis/.ipynb_checkpoints
+# OS
 .DS_Store
+
+# editors / IDEs
+.idea
+.vscode
+
+# Node
+node_modules
+
+# Python
+__pycache__/
+*.pyc
 api/.venv
-api/__pycache__
+data_analysis/.ipynb_checkpoints
+data_analysis/catboost_info
