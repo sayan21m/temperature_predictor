@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+/* class-based dark mode: `dark:` utilities apply when <html> has the `dark` class */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ */
+/* Animations                                                         */
+/* ------------------------------------------------------------------ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* smooth theme (light/dark) color transitions on surfaces */
+body,
+header,
+aside,
+main,
+select,
+input,
+table,
+th,
+td {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* staggered entrance for direct children (KPI grid & charts grid) */
+.stagger > * {
+  opacity: 0;
+  animation: fadeInUp 0.5s ease forwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.16s; }
+.stagger > *:nth-child(5) { animation-delay: 0.20s; }
+.stagger > *:nth-child(6) { animation-delay: 0.24s; }
+.stagger > *:nth-child(7) { animation-delay: 0.28s; }
+.stagger > *:nth-child(8) { animation-delay: 0.32s; }
+.stagger > *:nth-child(9) { animation-delay: 0.36s; }
+.stagger > *:nth-child(10) { animation-delay: 0.40s; }
+.stagger > *:nth-child(n + 11) { animation-delay: 0.44s; }
+
+/* respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .stagger > * {
+    animation: none;
+    opacity: 1;
+  }
+}

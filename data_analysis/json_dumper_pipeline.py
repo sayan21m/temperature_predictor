@@ -20,12 +20,21 @@ def outlier_stats(series):
         "outliers": int(((series < lower) | (series > upper)).sum())
     }
 
-class CompactEncoder(json.JSONEncoder):
-    def iterencode(self, obj, **kw):
-        if isinstance(obj, float):
-            yield format(obj, '.4f')
-            return
-        yield from super().iterencode(obj, **kw)
+def histogram(series, bins=50):
+    # compute the histogram once (was previously computed twice per feature)
+    counts, edges = np.histogram(series.dropna(), bins=bins)
+    return {"count": counts.tolist(), "bins": edges.tolist()}
+
+def round_floats(obj, ndigits=4):
+    # recursively round every float (incl. values re-introduced by mean/agg)
+    # so the exported JSON is not bloated by 15-17 digit precision
+    if isinstance(obj, float):
+        return round(obj, ndigits)
+    if isinstance(obj, dict):
+        return {k: round_floats(v, ndigits) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [round_floats(v, ndigits) for v in obj]
+    return obj
 
 state_mapping = {
     'JK': 'Jammu and Kashmir',
@@ -86,6 +95,10 @@ try:
 
     df = df.drop_duplicates()
 
+    # round numeric columns to 4 decimals -> large reduction in exported JSON size
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].round(4)
+
     temp_series = df.groupby('date_of_record')['avg_temp'].mean()
     min_temp_series = df.groupby('date_of_record')['min_temp'].mean()
     max_temp_series = df.groupby('date_of_record')['max_temp'].mean()
@@ -93,12 +106,10 @@ try:
     air_pressure_series = df.groupby('date_of_record')['air_pressure'].mean()
     rainfall_series = df.groupby('date_of_record')['rainfall'].mean()
 
-    df_sample = df.sample(5000, random_state=42)
+    df_sample = df.sample(min(len(df), 3000), random_state=42)
     df_state_sample = df.groupby('state', group_keys=False)\
-        .apply(lambda x: x.sample(min(len(x), 500)))\
+        .apply(lambda x: x.sample(min(len(x), 200), random_state=42))\
         .reset_index(drop=True)
-
-    df_season_sample = df.groupby('season', group_keys=False).apply(lambda x: x.sample(min(len(x), 500))).reset_index(drop=True)
 
     corr = df.corr(numeric_only=True)
     target_corr = df.corr(numeric_only=True)['avg_temp'].drop('avg_temp').sort_values(ascending=False)
@@ -232,7 +243,6 @@ try:
 
         # missing value count
         "missing_values": missing_values,
-        "null_count": null_count.to_dict(),
 
         "kpi_data": kpi_data,
 
@@ -253,15 +263,14 @@ try:
             'air_pressure': 'mean',
             'rainfall': 'mean',
         }).reset_index().to_dict(orient='records'),
-        "rainfall_lat_long": df.groupby(['latitude','longitude'])['rainfall'].mean().reset_index().to_dict(orient='records'),
 
-        # distribution analysis
-        "avg_temp_hist": {'count': np.histogram(df['avg_temp'], bins=1000)[0].tolist(), 'bins': np.histogram(df['avg_temp'], bins=1000)[1].tolist()},
-        "min_temp_hist": {'count': np.histogram(df['min_temp'], bins=1000)[0].tolist(), 'bins': np.histogram(df['min_temp'], bins=1000)[1].tolist()},
-        "max_temp_hist": {'count': np.histogram(df['max_temp'], bins=1000)[0].tolist(), 'bins': np.histogram(df['max_temp'], bins=1000)[1].tolist()},
-        "wind_speed_hist": {'count': np.histogram(df['wind_speed'], bins=1000)[0].tolist(), 'bins': np.histogram(df['wind_speed'], bins=1000)[1].tolist()},
-        "air_pressure_hist": {'count': np.histogram(df['air_pressure'], bins=1000)[0].tolist(), 'bins': np.histogram(df['air_pressure'], bins=1000)[1].tolist()},
-        "rainfall_hist": {'count': np.histogram(df['rainfall'], bins=1000)[0].tolist(), 'bins': np.histogram(df['rainfall'], bins=1000)[1].tolist()},
+        # distribution analysis (50 bins is plenty for display; 1000 was noisy & bloated)
+        "avg_temp_hist": histogram(df['avg_temp']),
+        "min_temp_hist": histogram(df['min_temp']),
+        "max_temp_hist": histogram(df['max_temp']),
+        "wind_speed_hist": histogram(df['wind_speed']),
+        "air_pressure_hist": histogram(df['air_pressure']),
+        "rainfall_hist": histogram(df['rainfall']),
 
         # outlier analysis
         "boxplot" : {
@@ -285,7 +294,6 @@ try:
         # scatter plot
         "scatter_sample": df_sample.to_dict(orient='records'),
         "scatter_sample_state": df_state_sample.to_dict(orient='records'),
-        "scatter_sample_season": df_season_sample.to_dict(orient = 'records'),
 
         # correlation heatmap of numeric columns
         "corr": {
@@ -302,8 +310,11 @@ try:
         "kurtosis": kurt,
     }
 
+    data = round_floats(data)
+
     with open('../docs/data.json', 'w') as f:
-        json.dump(data, f, cls=CompactEncoder, indent=4, default=str)
+        # compact separators + no indent -> no wasted whitespace in the payload
+        json.dump(data, f, separators=(',', ':'), default=str)
 
     print("Data dumped successfully!")
 

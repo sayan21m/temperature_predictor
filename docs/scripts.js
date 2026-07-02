@@ -13,9 +13,175 @@ async function loadData() {
 // common configuration for all plots
 var config = {
     scrollZoom: true,
+    responsive: true,
     modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d'],
     displaylogo: false
 };
+
+// ---------------------------------------------------------------------------
+// Theme helpers (keep Plotly charts in sync with the light / dark UI)
+// ---------------------------------------------------------------------------
+
+function isDark() {
+    return document.documentElement.classList.contains('dark');
+}
+
+// merge theme-aware colors into a Plotly layout while preserving titles/axes
+function themeLayout(layout = {}) {
+    const dark = isDark();
+    const grid = dark ? 'rgba(148,163,184,0.18)' : 'rgba(15,23,42,0.10)';
+    layout.paper_bgcolor = 'rgba(0,0,0,0)';
+    layout.plot_bgcolor = 'rgba(0,0,0,0)';
+    layout.font = Object.assign({ color: dark ? '#cbd5e1' : '#334155' }, layout.font);
+    layout.xaxis = Object.assign({ gridcolor: grid, zerolinecolor: grid }, layout.xaxis);
+    layout.yaxis = Object.assign({ gridcolor: grid, zerolinecolor: grid }, layout.yaxis);
+    return layout;
+}
+
+const CHART_IDS = [
+    'timeSeriesTrendChart', 'locationAnalysisChart', 'histogramChart', 'boxPlotChart',
+    'scatterRelationChart', 'heatmapChart', 'targetCorrChart', 'monthlyTrendChart'
+];
+
+// re-theme charts already rendered on screen (invoked by the theme toggle)
+window.applyChartTheme = function () {
+    if (typeof Plotly === 'undefined') return;
+    const dark = isDark();
+    const grid = dark ? 'rgba(148,163,184,0.18)' : 'rgba(15,23,42,0.10)';
+    const update = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        'font.color': dark ? '#cbd5e1' : '#334155',
+        'xaxis.gridcolor': grid,
+        'yaxis.gridcolor': grid,
+        'xaxis.zerolinecolor': grid,
+        'yaxis.zerolinecolor': grid
+    };
+    CHART_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.data) {
+            try { Plotly.relayout(id, update); } catch (e) { /* non-cartesian charts */ }
+        }
+    });
+};
+
+// ---------------------------------------------------------------------------
+// UX helpers
+// ---------------------------------------------------------------------------
+
+// non-blocking toast notifications (replaces intrusive window.alert popups)
+function showToast(message, type = 'info') {
+    const palette = {
+        info: { bg: '#0e7490', border: '#22d3ee' },
+        success: { bg: '#15803d', border: '#4ade80' },
+        warning: { bg: '#b45309', border: '#fbbf24' },
+        error: { bg: '#b91c1c', border: '#f87171' }
+    };
+    const { bg, border } = palette[type] || palette.info;
+
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.style.cssText =
+            'position:fixed;bottom:1rem;right:1rem;z-index:10000;display:flex;' +
+            'flex-direction:column;gap:0.5rem;max-width:min(90vw,22rem);';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText =
+        `background:${bg};color:#fff;border-left:4px solid ${border};` +
+        'padding:0.75rem 1rem;border-radius:0.75rem;font-size:0.875rem;line-height:1.3;' +
+        'box-shadow:0 10px 25px rgba(0,0,0,0.35);opacity:0;transform:translateY(8px);' +
+        'transition:opacity .25s ease, transform .25s ease;';
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    });
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 250);
+    }, 3500);
+}
+
+// update a chart's descriptive subtitle so users know what they're viewing
+function setMsg(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+// animate a numeric KPI counting up to its value (also adds thousands separators)
+function animateCount(el, target, opts = {}) {
+    if (!el) return;
+    const { duration = 900, decimals = 0, prefix = '', suffix = '' } = opts;
+    const fmt = (v) => prefix + Number(v).toLocaleString(undefined, {
+        minimumFractionDigits: decimals, maximumFractionDigits: decimals
+    }) + suffix;
+
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !isFinite(target)) { el.textContent = fmt(target); return; }
+
+    const start = performance.now();
+    function tick(now) {
+        const p = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+        el.textContent = fmt(target * eased);
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(tick);
+}
+
+// download an array of row objects as a CSV file
+function exportToCSV(rows, columns, filename = 'eda_export.csv') {
+    if (!rows || !rows.length) {
+        showToast('No data available to export.', 'warning');
+        return;
+    }
+    const cols = columns && columns.length ? columns : Object.keys(rows[0]);
+    const escape = (v) => {
+        const s = v === null || v === undefined ? '' : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [
+        cols.join(','),
+        ...rows.map(r => cols.map(c => escape(r[c])).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} rows to ${filename}`, 'success');
+}
+
+// show/hide table columns whose header does not match the search query
+function filterTableColumns(tableId, query) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const q = (query || '').trim().toLowerCase();
+
+    const matches = [];
+    table.querySelectorAll('thead th').forEach((th, idx) => {
+        const isMatch = !q || th.textContent.toLowerCase().includes(q);
+        matches[idx] = isMatch;
+        th.style.display = isMatch ? '' : 'none';
+    });
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        tr.querySelectorAll('td').forEach((td, idx) => {
+            td.style.display = matches[idx] === false ? 'none' : '';
+        });
+    });
+}
 
 // defining the elements
 const datasetColumn = document.getElementById('datasetBtn');
@@ -36,6 +202,7 @@ const datasetTable = document.getElementById('dataPreviewTable');
 
 let data;
 let mapListenerAttached = false;
+let currentPreviewData = [];
 
 // declaring sorting flags
 let currentSort = {
@@ -45,7 +212,7 @@ let currentSort = {
 
 // ploting the time series graphs
 function time_series_plot(df, id, y_title) {
-    var data = {
+    var trace = {
         x: df[0].map(d => new Date(d)),
         y: df[1],
         type: 'scatter',
@@ -59,7 +226,7 @@ function time_series_plot(df, id, y_title) {
         yaxis: {title: y_title}
     };
 
-    Plotly.react(id, [data], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // ploting the location analysis graphs
@@ -79,7 +246,7 @@ function location_analysis_plot(x, y, id, x_title, y_title) {
         yaxis: {title: y_title}
     };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // plotting the coordinates on the map 
@@ -122,7 +289,7 @@ function map_plot(df, id) {
         margin: { r: 0, t: 0, b: 0, l: 0 }
     };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // plotting the histogram 
@@ -155,7 +322,7 @@ function hist_plot(df, text, id) {
         margin: { t: 30 }
     };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // box plot for outliers
@@ -180,7 +347,7 @@ function box_plot(df, text, id) {
         margin: { t: 30 }
     };
       
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // plotting the data point - scatter plot
@@ -215,7 +382,7 @@ function scatter_plot(x, y, text, x_label, y_label, id) {
           }
     };
       
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 async function update_scatter() {
@@ -227,7 +394,7 @@ async function update_scatter() {
 
     // plot only numerical columns
     if (typeof x[0] !== "number" || typeof y[0] !== "number") {
-        window.alert("Scatter only supports numerical columns");
+        showToast('Scatter plot only supports numerical columns.', 'warning');
         return;
     }
 
@@ -237,6 +404,7 @@ async function update_scatter() {
          ${y_col}: ${i[y_col]}`
     )
     scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+    setMsg('scatterRelationChartMsg', `${x_col} vs ${y_col}`);
 }
 
 // filtered scatter plot based on the state selected in the dropdown
@@ -261,6 +429,7 @@ function update_scatter_state() {
          ${y_col}: ${i[y_col]}`
     )
     scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+    setMsg('scatterRelationChartMsg', `${x_col} vs ${y_col} in ${filter}`);
 }
 
 // filtered scatter plot based on the season selected in the dropdown
@@ -284,11 +453,13 @@ function update_scatter_season() {
 
     // plot only numerical columns
     if (typeof x[0] !== "number" || typeof y[0] !== "number") {
-        window.alert("Scatter only supports numerical columns");
+        showToast('Scatter plot only supports numerical columns.', 'warning');
         return;
     }
 
     scatter_plot(x, y, text, x_col, y_col, "scatterRelationChart");
+    const seasonLabel = filterState ? `${filter} · ${filterState}` : filter;
+    setMsg('scatterRelationChartMsg', `${x_col} vs ${y_col} (${seasonLabel})`);
 }
 
 // plotting the correlation heatmap
@@ -314,7 +485,7 @@ async function corr_heatmap(df, id) {
         dragmode: "pan"
     };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // plotting target correlation with the column selected in the target dropdown
@@ -335,7 +506,7 @@ function target_corr_plot(feature, values, id, target) {
         dragmode: "pan"
     };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 // plotting the monthly trend of the selected target in the target dropdown
@@ -366,7 +537,7 @@ function monthly_trend_plot(xValue, yValue, id) {
         barcornerradius: 15,
       };
 
-    Plotly.react(id, [trace], layout, config);
+    Plotly.react(id, [trace], themeLayout(layout), config);
 }
 
 function update_monthly_trend() {
@@ -379,16 +550,18 @@ function update_monthly_trend() {
 
 // render the sorted dataset
 function update_table(dataset) {
-    let dataTableHead = ['<thead class="bg-slate-800 sticky top-0 z-10">',
+    currentPreviewData = dataset;
+
+    let dataTableHead = ['<thead class="bg-slate-100 sticky top-0 z-10 dark:bg-slate-800">',
         "<tr>",
-        ...data.columns.map((k, l) => `<th onclick="sortTable(${l})" class="px-4 py-2 border-b border-slate-600 cursor-pointer hover:bg-slate-700 select-none">${k}</th>`),
+        ...data.columns.map((k, l) => `<th onclick="sortTable(${l})" class="px-4 py-2 border-b border-slate-300 cursor-pointer hover:bg-slate-200 select-none dark:border-slate-600 dark:hover:bg-slate-700">${k}</th>`),
         "</tr>",
         "</thead>"];
 
     let dataTableBody = ['<tbody class="overflow-hidden">']
     for (let row of dataset) {
-        let rowVal = ['<tr class="bg-slate-900">']
-        let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-700">${m}</td>`)
+        let rowVal = ['<tr class="bg-white dark:bg-slate-900">']
+        let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-200 dark:border-slate-700">${m}</td>`)
         rowVal.push(...rowEntry);
         rowVal.push("</tr>");
         dataTableBody.push(...rowVal);
@@ -396,6 +569,12 @@ function update_table(dataset) {
     dataTableHead.push(...dataTableBody);
     dataTableHead = dataTableHead.join('');
     datasetTable.innerHTML = dataTableHead;
+
+    // keep the active column search applied after a re-render (e.g. sorting)
+    const searchInput = document.getElementById('searchColumn');
+    if (searchInput && searchInput.value.trim()) {
+        filterTableColumns('dataPreviewTable', searchInput.value);
+    }
 }
 
 async function main() {
@@ -404,13 +583,13 @@ async function main() {
         // loding the data
         data = await loadData();
 
-        // setting KPI values
+        // setting KPI values (with a count-up animation)
         if (datasetRowCount) {
-            datasetRowCount.textContent = data.shape[0];
+            animateCount(datasetRowCount, data.shape[0]);
         }
 
         if (stationCount) {
-            stationCount.textContent = data.station_count;
+            animateCount(stationCount, data.station_count);
         }
 
         // adding option on target dropdown
@@ -425,19 +604,21 @@ async function main() {
 
             // plotting the scatter plot of target vs feature selected in the dropdown
             try {update_scatter();}
-            catch {window.alert("Scatterplot not available for the selected Target.");}
+            catch {showToast('Scatter plot is not available for the selected target.', 'warning');}
 
             // plotting the target correlation with other features
             try {
                 const target_index = data.corr.columns.indexOf(targetColumn.value);
                 const feature = data.corr.columns.filter(i => i !== targetColumn.value);
                 const values = data.corr.values[target_index].filter(i => data.corr.values[target_index].indexOf(i) !== target_index);
-                target_corr_plot(feature, values, targetCorrChart, targetColumn.value);
-            } catch {window.alert("Correlation plot not available for the selected Target.");}
+                target_corr_plot(feature, values, 'targetCorrChart', targetColumn.value);
+                setMsg('targetCorrChartMsg', `Feature correlation with ${targetColumn.value}`);
+            } catch {showToast('Correlation plot is not available for the selected target.', 'warning');}
 
             try {
                 update_monthly_trend();
-            } catch {window.alert("Monthly trend plot not available for the selected Target.");}
+                setMsg('monthlyTrendChartMsg', `Monthly trend of ${targetColumn.value}`);
+            } catch {showToast('Monthly trend is not available for the selected target.', 'warning');}
         });
 
         // adding option on dataset dropdown
@@ -451,16 +632,22 @@ async function main() {
             missingValuesKPI.textContent = `${data.missing_values[datasetColumn.value].toFixed(2)} %`;
 
             // plotting the hstogram of the selected feature in dataset dropdown
-            try {histogram_plots[datasetColumn.value]();}
-            catch {window.alert("Histogram not available for the selected feature.");}
+            try {
+                histogram_plots[datasetColumn.value]();
+                setMsg('histPlotMsg', `Distribution of ${datasetColumn.value}`);
+            }
+            catch {showToast('Histogram is not available for the selected feature.', 'warning');}
 
             // plotting the boxplot of the selected feature in dataset dropdown
-            try {boxplots[datasetColumn.value]();}
-            catch {window.alert("Boxplot not available for the selected feature.")}
+            try {
+                boxplots[datasetColumn.value]();
+                setMsg('boxPlotChartMsg', `Spread & outliers of ${datasetColumn.value}`);
+            }
+            catch {showToast('Box plot is not available for the selected feature.', 'warning');}
 
             // plotting the scatter plot of target vs feature selected in the dropdown
             try {update_scatter();}
-            catch {window.alert("Scatterplot not available for the selected Target.");}
+            catch {showToast('Scatter plot is not available for the selected feature.', 'warning');}
         });
 
         // adding option on state, district, station and season dropdown
@@ -529,26 +716,32 @@ async function main() {
         // plotting time series trend
         let time_series_plot_idx = 0;
         const time_series_plots = [
-            () => time_series_plot(data.avg_temp_time, 'timeSeriesTrendChart', 'Average Temperature (°C)'),
-            () => time_series_plot(data.min_temp_time, 'timeSeriesTrendChart', 'Minimum Temperature (°C)'),
-            () => time_series_plot(data.max_temp_time, 'timeSeriesTrendChart', 'Maximum Temperature (°C)'),
-            () => time_series_plot(data.wind_speed_time, 'timeSeriesTrendChart', 'Wind Speed (m/s)'),
-            () => time_series_plot(data.air_pressure_time, 'timeSeriesTrendChart', 'Air Pressure (hPa)'),
-            () => time_series_plot(data.rainfall_time, 'timeSeriesTrendChart', 'Total Rainfall (mm)'),
+            { label: 'Average Temperature (°C)', render: () => time_series_plot(data.avg_temp_time, 'timeSeriesTrendChart', 'Average Temperature (°C)') },
+            { label: 'Minimum Temperature (°C)', render: () => time_series_plot(data.min_temp_time, 'timeSeriesTrendChart', 'Minimum Temperature (°C)') },
+            { label: 'Maximum Temperature (°C)', render: () => time_series_plot(data.max_temp_time, 'timeSeriesTrendChart', 'Maximum Temperature (°C)') },
+            { label: 'Wind Speed (m/s)', render: () => time_series_plot(data.wind_speed_time, 'timeSeriesTrendChart', 'Wind Speed (m/s)') },
+            { label: 'Air Pressure (hPa)', render: () => time_series_plot(data.air_pressure_time, 'timeSeriesTrendChart', 'Air Pressure (hPa)') },
+            { label: 'Total Rainfall (mm)', render: () => time_series_plot(data.rainfall_time, 'timeSeriesTrendChart', 'Total Rainfall (mm)') },
         ];
 
-        time_series_plots[time_series_plot_idx]();
+        function render_time_series() {
+            const item = time_series_plots[time_series_plot_idx];
+            item.render();
+            setMsg('trendChartMsg', `${item.label}  ·  ${time_series_plot_idx + 1} of ${time_series_plots.length}`);
+        }
+
+        render_time_series();
 
         const prevBtn = document.getElementById('prevTimeSeriesBtn');
         prevBtn.addEventListener('click', () => {
             time_series_plot_idx = (time_series_plot_idx - 1 + time_series_plots.length) % time_series_plots.length;
-            time_series_plots[time_series_plot_idx]();
+            render_time_series();
         });
         
         const nextBtn = document.getElementById('nextTimeSeriesBtn');
         nextBtn.addEventListener('click', () => {
             time_series_plot_idx = (time_series_plot_idx + 1) % time_series_plots.length;
-            time_series_plots[time_series_plot_idx]();
+            render_time_series();
         });
 
         // plotting location analysis chart
@@ -610,51 +803,57 @@ async function main() {
         
         const location_analysis_plots = [
             // avg_temp
-            () => location_analysis_plot(stateKey, avg_temp_state_location, 'locationAnalysisChart', 'State', 'Average Temperature (°C)'),
-            () => location_analysis_plot(districtKey, avg_temp_district_location, 'locationAnalysisChart', 'District', 'Average Temperature (°C)'),
-            () => location_analysis_plot(stationKey, avg_temp_station_location, 'locationAnalysisChart', 'Station', 'Average Temperature (°C)'),
+            { label: 'Average Temperature (°C) by State', render: () => location_analysis_plot(stateKey, avg_temp_state_location, 'locationAnalysisChart', 'State', 'Average Temperature (°C)') },
+            { label: 'Average Temperature (°C) by District', render: () => location_analysis_plot(districtKey, avg_temp_district_location, 'locationAnalysisChart', 'District', 'Average Temperature (°C)') },
+            { label: 'Average Temperature (°C) by Station', render: () => location_analysis_plot(stationKey, avg_temp_station_location, 'locationAnalysisChart', 'Station', 'Average Temperature (°C)') },
 
             // min_temp
-            () => location_analysis_plot(stateKey, min_temp_state_location, 'locationAnalysisChart', 'State', 'Minimum Temperature (°C)'),
-            () => location_analysis_plot(districtKey, min_temp_district_location, 'locationAnalysisChart', 'District', 'Minimum Temperature (°C)'),
-            () => location_analysis_plot(stationKey, min_temp_station_location, 'locationAnalysisChart', 'Station', 'Minimum Temperature (°C)'),
+            { label: 'Minimum Temperature (°C) by State', render: () => location_analysis_plot(stateKey, min_temp_state_location, 'locationAnalysisChart', 'State', 'Minimum Temperature (°C)') },
+            { label: 'Minimum Temperature (°C) by District', render: () => location_analysis_plot(districtKey, min_temp_district_location, 'locationAnalysisChart', 'District', 'Minimum Temperature (°C)') },
+            { label: 'Minimum Temperature (°C) by Station', render: () => location_analysis_plot(stationKey, min_temp_station_location, 'locationAnalysisChart', 'Station', 'Minimum Temperature (°C)') },
 
             // max_temp
-            () => location_analysis_plot(stateKey, max_temp_state_location, 'locationAnalysisChart', 'State', 'Maximum Temperature (°C)'),
-            () => location_analysis_plot(districtKey, max_temp_district_location, 'locationAnalysisChart', 'District', 'Maximum Temperature (°C)'),
-            () => location_analysis_plot(stationKey, max_temp_station_location, 'locationAnalysisChart', 'Station', 'Maximum Temperature (°C)'),
+            { label: 'Maximum Temperature (°C) by State', render: () => location_analysis_plot(stateKey, max_temp_state_location, 'locationAnalysisChart', 'State', 'Maximum Temperature (°C)') },
+            { label: 'Maximum Temperature (°C) by District', render: () => location_analysis_plot(districtKey, max_temp_district_location, 'locationAnalysisChart', 'District', 'Maximum Temperature (°C)') },
+            { label: 'Maximum Temperature (°C) by Station', render: () => location_analysis_plot(stationKey, max_temp_station_location, 'locationAnalysisChart', 'Station', 'Maximum Temperature (°C)') },
 
             // wind_speed
-            () => location_analysis_plot(stateKey, wind_speed_state_location, 'locationAnalysisChart', 'State', 'Wind Speed (m/s)'),
-            () => location_analysis_plot(districtKey, wind_speed_district_location, 'locationAnalysisChart', 'District', 'Wind Speed (m/s)'),
-            () => location_analysis_plot(stationKey, wind_speed_station_location, 'locationAnalysisChart', 'Station', 'Wind Speed (m/s)'),
+            { label: 'Wind Speed (m/s) by State', render: () => location_analysis_plot(stateKey, wind_speed_state_location, 'locationAnalysisChart', 'State', 'Wind Speed (m/s)') },
+            { label: 'Wind Speed (m/s) by District', render: () => location_analysis_plot(districtKey, wind_speed_district_location, 'locationAnalysisChart', 'District', 'Wind Speed (m/s)') },
+            { label: 'Wind Speed (m/s) by Station', render: () => location_analysis_plot(stationKey, wind_speed_station_location, 'locationAnalysisChart', 'Station', 'Wind Speed (m/s)') },
 
             // air_pressure
-            () => location_analysis_plot(stateKey, pressure_state_location, 'locationAnalysisChart', 'State', 'Air Pressure (hPa)'),
-            () => location_analysis_plot(districtKey, pressure_district_location, 'locationAnalysisChart', 'District', 'Air Pressure (hPa)'),
-            () => location_analysis_plot(stationKey, pressure_station_location, 'locationAnalysisChart', 'Station', 'Air Pressure (hPa)'),
+            { label: 'Air Pressure (hPa) by State', render: () => location_analysis_plot(stateKey, pressure_state_location, 'locationAnalysisChart', 'State', 'Air Pressure (hPa)') },
+            { label: 'Air Pressure (hPa) by District', render: () => location_analysis_plot(districtKey, pressure_district_location, 'locationAnalysisChart', 'District', 'Air Pressure (hPa)') },
+            { label: 'Air Pressure (hPa) by Station', render: () => location_analysis_plot(stationKey, pressure_station_location, 'locationAnalysisChart', 'Station', 'Air Pressure (hPa)') },
 
             // rainfall
-            () => location_analysis_plot(stateKey, rainfall_state_location, 'locationAnalysisChart', 'State', 'Avg Rainfall (mm)'),
-            () => location_analysis_plot(districtKey, rainfall_district_location, 'locationAnalysisChart', 'District', 'Avg Rainfall (mm)'),
-            () => location_analysis_plot(stationKey, rainfall_station_location, 'locationAnalysisChart', 'Station', 'Avg Rainfall (mm)'),
+            { label: 'Avg Rainfall (mm) by State', render: () => location_analysis_plot(stateKey, rainfall_state_location, 'locationAnalysisChart', 'State', 'Avg Rainfall (mm)') },
+            { label: 'Avg Rainfall (mm) by District', render: () => location_analysis_plot(districtKey, rainfall_district_location, 'locationAnalysisChart', 'District', 'Avg Rainfall (mm)') },
+            { label: 'Avg Rainfall (mm) by Station', render: () => location_analysis_plot(stationKey, rainfall_station_location, 'locationAnalysisChart', 'Station', 'Avg Rainfall (mm)') },
 
             // geo map
-            () => map_plot(data.avg_temp_lat_long, 'locationAnalysisChart')
+            { label: 'Geographic map · Average Temperature', render: () => map_plot(data.avg_temp_lat_long, 'locationAnalysisChart') }
         ];
 
-        location_analysis_plots[location_analysis_plot_idx]();
+        function render_location_analysis() {
+            const item = location_analysis_plots[location_analysis_plot_idx];
+            item.render();
+            setMsg('locationChartMsg', `${item.label}  ·  ${location_analysis_plot_idx + 1} of ${location_analysis_plots.length}`);
+        }
+
+        render_location_analysis();
 
         const prevLocationBtn = document.getElementById('prevLocationBtn');
         prevLocationBtn.addEventListener('click', () => {
             location_analysis_plot_idx = (location_analysis_plot_idx - 1 + location_analysis_plots.length) % location_analysis_plots.length;
-            location_analysis_plots[location_analysis_plot_idx]();
+            render_location_analysis();
         });
         
         const nextLocationBtn = document.getElementById('nextLocationBtn');
         nextLocationBtn.addEventListener('click', () => {
             location_analysis_plot_idx = (location_analysis_plot_idx + 1) % location_analysis_plots.length;
-            location_analysis_plots[location_analysis_plot_idx]();
+            render_location_analysis();
         });
 
         // plotting histogram of the selected feature in dataset dropdown and executed in the dropdown change event
@@ -667,6 +866,7 @@ async function main() {
             'air_pressure' : () => hist_plot(data.air_pressure_hist, 'Air Pressure (hPa)', 'histogramChart'),
         };
         histogram_plots['avg_temp']();
+        setMsg('histPlotMsg', 'Distribution of avg_temp');
 
         // plotting boxplot of the selected feature in dataset dropdown and executed in the dropdown change event
         const boxplots = {
@@ -678,6 +878,7 @@ async function main() {
             'air_pressure': () => box_plot(data.boxplot['air_pressure'], 'Air Pressure (hPa)', 'boxPlotChart'),
         };
         boxplots['avg_temp']();
+        setMsg('boxPlotChartMsg', 'Spread & outliers of avg_temp');
 
         // plotting scatterplot of the selected feature vs selected target from the dropdown and executed in the dropdown change event
         update_scatter();
@@ -689,18 +890,20 @@ async function main() {
         const target_index = data.corr.columns.indexOf('avg_temp');
         const feature = data.corr.columns.filter(i => i !== 'avg_temp');
         const values = data.corr.values[target_index].filter(i => data.corr.values[target_index].indexOf(i) !== target_index);
-        target_corr_plot(feature, values, targetCorrChart, 'avg_temp')
+        target_corr_plot(feature, values, 'targetCorrChart', 'avg_temp')
+        setMsg('targetCorrChartMsg', 'Feature correlation with avg_temp');
 
         // plotting the monthly trend and change according to the target dropdown change
         update_monthly_trend();
+        setMsg('monthlyTrendChartMsg', 'Monthly trend of avg_temp');
 
         // displaying the data stats
-        let statHead = ['<thead class="bg-slate-800 sticky top-0 z-10">', "<tr>", ...Object.keys(data.stats[0]).map(k => `<th class="px-4 py-2 border-b border-slate-600">${k}</th>`), "</tr>", "</thead>"];
+        let statHead = ['<thead class="bg-slate-100 sticky top-0 z-10 dark:bg-slate-800">', "<tr>", ...Object.keys(data.stats[0]).map(k => `<th class="px-4 py-2 border-b border-slate-300 dark:border-slate-600">${k}</th>`), "</tr>", "</thead>"];
 
         let statBody = ["<tbody>"]
         for (let row of data.stats) {
-            let rowVal = ['<tr class="bg-slate-900">']
-            let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-700">${m}</td>`)
+            let rowVal = ['<tr class="bg-white dark:bg-slate-900">']
+            let rowEntry = Object.values(row).map(m => `<td class="px-4 py-2 border-b border-slate-200 dark:border-slate-700">${m}</td>`)
             rowVal.push(...rowEntry);
             statBody.push(...rowVal);
         }
@@ -711,6 +914,22 @@ async function main() {
 
         // display the data table
         update_table(data.scatter_sample.slice(0, 50));
+
+        // wire up the header Export button -> download the current preview as CSV
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                exportToCSV(currentPreviewData, data.columns, 'data_preview.csv');
+            });
+        }
+
+        // wire up the header column search -> filter Data Preview columns live
+        const searchInput = document.getElementById('searchColumn');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                filterTableColumns('dataPreviewTable', e.target.value);
+            });
+        }
 
         window.sortTable = function(colIdx) {
             let col = data.columns[colIdx];
@@ -747,11 +966,13 @@ async function main() {
             update_table(sortedData);
         }
     } catch (err) {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.style.display = 'none';
         document.body.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#555;">
-                <h2>⚠️ Failed to load dashboard data</h2>
-                <p>Make sure <code>data.json</code> exists at <code>../data_analysis/data.json</code></p>
-                <pre style="color:red;">${err.message}</pre>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;height:100vh;padding:1.5rem;text-align:center;font-family:sans-serif;background:#0f172a;color:#cbd5e1;">
+                <h2 style="color:#f87171;margin:0;">⚠️ Failed to load dashboard data</h2>
+                <p style="margin:0;">Make sure <code>data.json</code> exists next to <code>index.html</code> in the <code>docs/</code> folder.</p>
+                <pre style="max-width:90vw;overflow:auto;color:#fca5a5;background:#1e293b;padding:0.75rem 1rem;border-radius:0.5rem;">${err.message}</pre>
             </div>`;
     }
     

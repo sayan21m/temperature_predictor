@@ -2,41 +2,70 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Exploratory Data Analysis</title>
+    <script>
+      // apply saved theme before paint to avoid a flash of the wrong theme
+      (function () {
+        try {
+          var t = localStorage.getItem("theme") || "dark";
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <link href="./output.css" rel="stylesheet" />
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script type="module" src="./scripts.js"></script>
   </head>
-  <body class="h-dvh overflow-hidden bg-black text-white">
+  <body class="h-dvh overflow-hidden bg-slate-100 text-slate-900 antialiased dark:bg-slate-900 dark:text-white">
 
-    <div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;color:#fff;font-size:1.25rem;">Loading data…</div>
-    <!-- Header -->
-    <div class="flex flex-col h-full">
+    <div
+      id="loadingOverlay"
+      class="fixed inset-0 z-9999 flex flex-col items-center justify-center gap-4 bg-white/80 text-slate-700 backdrop-blur-sm dark:bg-slate-950/80 dark:text-slate-200">
+      <div class="h-10 w-10 animate-spin rounded-full border-2 border-slate-300 border-t-cyan-500 dark:border-slate-600 dark:border-t-cyan-400"></div>
+      <span class="text-sm font-medium tracking-wide">Loading data…</span>
+    </div>
+
+    <div class="flex h-full flex-col">
+      <!-- Header -->
       <header
         id="header"
-        class="flex flex-row justify-between border-b border-white/10 bg-slate-950 px-6 py-4 lg:flex-row lg:items-end lg:justify-between sticky top-0 z-50">
-        <div class="flex flex-col">
-          <h1 class="title_header text-3xl font-bold text-cyan-300">
-            EDA Report
-          </h1>
-          <p class="mt-1 text-sm text-slate-400">
-            Explore distributions, relationships, and data quality
-          </p>
+        class="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4 dark:border-white/10 dark:bg-slate-950/95">
+        <div class="flex min-w-0 items-center gap-3">
+          <button
+            id="sidebarToggle"
+            aria-label="Toggle filters"
+            class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 hover:cursor-pointer lg:hidden dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="title_header truncate text-xl font-bold text-cyan-600 sm:text-2xl lg:text-3xl dark:text-cyan-300">
+              EDA Report
+            </h1>
+            <p class="mt-0.5 hidden truncate text-xs text-slate-500 sm:block sm:text-sm dark:text-slate-400">
+              Explore distributions, relationships, and data quality
+            </p>
+          </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
           <label for="searchColumn" class="sr-only">Search column</label>
-
           <input
             id="searchColumn"
             type="text"
             placeholder="Search Column"
-            class="rounded-2xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-400 hover:bg-slate-800"
-          />
+            class="hidden w-40 rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 hover:bg-slate-50 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/40 md:block lg:w-56 dark:border-white/10 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-400 dark:hover:bg-slate-800" />
 
           <button
             id="themeBtn"
-            class="text-slate-400 rounded-2xl bg-slate-900 border border-white/10 px-4 py-2 text-sm flex flex-row hover:bg-slate-800 hover:cursor-pointer">
+            aria-label="Toggle theme"
+            title="Toggle light / dark theme"
+            class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 hover:cursor-pointer sm:px-4 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+            <!-- moon: shown in light mode (click to go dark) -->
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -45,143 +74,144 @@
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-              class="w-5 h-5 text-gray-400"
-            >
-              <path
-                d="M21 12.79A9 9 0 1 1 11.21 3 
-                                    7 7 0 0 0 21 12.79z"
-              />
+              class="h-5 w-5 block dark:hidden">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+            <!-- sun: shown in dark mode (click to go light) -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-5 w-5 hidden dark:block">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
             </svg>
           </button>
 
           <button
             id="exportBtn"
-            class="rounded-2xl bg-cyan-600 border border-white/10 px-4 py-2 text-sm font-medium hover:bg-cyan-800 hover:cursor-pointer">
+            class="rounded-2xl border border-cyan-600/20 bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-700 hover:cursor-pointer sm:px-4">
             Export
           </button>
         </div>
       </header>
+
       <!-- Main Layout -->
-      <div id="edaBody" class="flex flex-1 overflow-hidden">
+      <div id="edaBody" class="relative flex flex-1 overflow-hidden">
+        <!-- Mobile overlay -->
+        <div
+          id="sidebarOverlay"
+          class="fixed inset-0 z-30 hidden bg-black/50 backdrop-blur-sm lg:hidden"></div>
+
         <!-- Sidebar -->
         <aside
           id="sidebar"
-          class="w-64 h-full flex flex-col gap-5 border-r border-white/10 bg-slate-950 px-4 py-6 overflow-y-auto">
+          class="fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform duration-300 ease-in-out lg:static lg:z-0 lg:w-64 lg:translate-x-0 dark:border-white/10 dark:bg-slate-950">
+          <div class="flex items-center justify-between lg:hidden">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Controls</h2>
+            <button
+              id="sidebarClose"
+              aria-label="Close filters"
+              class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 p-1.5 text-slate-600 hover:bg-slate-200 hover:cursor-pointer dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
           <div id="dataset-select" class="flex flex-col">
             <div id="dataset">
-              <h2 class="mb-4 text-lg font-semibold text-gray-400">FEATURE</h2>
-
-              <div class="flex flex-col space-y-3 text-sm text-slate-300">
+              <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Feature</h2>
+              <div class="flex flex-col space-y-3 text-sm text-slate-700 dark:text-slate-300">
                 <select
                   id="datasetBtn"
-                  class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                  class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                   <option disabled selected value="">Select Feature</option>
                 </select>
               </div>
             </div>
           </div>
+
           <div id="target-select">
             <div id="target">
-              <h2 class="mb-4 text-lg font-semibold text-gray-400">TARGET</h2>
-
-              <div class="flex flex-col space-y-3 text-sm text-slate-300">
+              <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Target</h2>
+              <div class="flex flex-col space-y-3 text-sm text-slate-700 dark:text-slate-300">
                 <select
                   id="targetBtn"
-                  class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                  class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                   <option disabled selected value="">Select Column</option>
                 </select>
               </div>
             </div>
           </div>
-          <div id="filters">
-            <h2 class="mb-4 text-lg font-semibold text-gray-400">FILTERS</h2>
 
-            <div class="flex flex-col space-y-3 text-sm text-slate-300">
+          <div id="filters">
+            <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Filters</h2>
+            <div class="flex flex-col space-y-3 text-sm text-slate-700 dark:text-slate-300">
               <select
                 id="state-filter"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                 <option disabled selected value="">State</option>
               </select>
 
               <select
                 id="district-filter"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                 <option disabled selected value="">District</option>
               </select>
 
               <select
                 id="station-filter"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                 <option disabled selected value="">Station</option>
               </select>
 
-              <!-- <input
-                id="date-filter"
-                type="date"
-                class="w-full rounded-xl bg-slate-900 px-4 py-3 border border-white/10"
-              /> -->
               <select
                 id="season-filter"
-                class="w-full rounded-lg border border-slate-700 bg-slate-900 p-3 hover:bg-slate-800 hover:cursor-pointer">
+                class="w-full rounded-lg border border-slate-300 bg-white p-3 outline-none hover:bg-slate-50 hover:cursor-pointer focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                 <option disabled selected value="">Season</option>
               </select>
             </div>
           </div>
         </aside>
 
-        <main id="main_body" class="flex-1 overflow-y-auto bg-slate-900 p-6 pb-10">
+        <main id="main_body" class="flex-1 overflow-y-auto bg-slate-100 p-4 pb-10 sm:p-6 dark:bg-slate-900">
           <!-- KPI Cards -->
           <section id="kpi-cards" class="kpi_card mb-6">
-            <h2 class="mb-4 text-lg font-semibold">KPI Cards</h2>
-            <div
-              class="grid grid-cols-1 gap-4 xl:gap-4 md:grid-cols-1 xl:grid-cols-2">
-              <div class="flex flex-col gap-4">
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Rows</p>
-                  <h3 id="datasetRowCount" class="mt-2 text-2xl font-bold">
-                    124,578
-                  </h3>
-                </div>
-
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Missing</p>
-                  <h3 id="missingValueCount" class="mt-2 text-2xl font-bold">
-                    0.00 %
-                  </h3>
-                </div>
-
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Average Temperature</p>
-                  <h3 id="avgTemperatureCount" class="mt-2 text-2xl font-bold">
-                    0 °C
-                  </h3>
-                </div>
+            <h2 class="mb-4 text-lg font-semibold">Overview</h2>
+            <div class="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-6">
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Rows</p>
+                <h3 id="datasetRowCount" class="mt-2 text-xl font-bold sm:text-2xl">124,578</h3>
               </div>
-              <div class="flex flex-col gap-4">
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Stations</p>
-                  <h3 id="stationCount" class="mt-2 text-2xl font-bold">87</h3>
-                </div>
 
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Total Rainfall</p>
-                  <h3 id="totalRainfallCount" class="mt-2 text-2xl font-bold">
-                    0 mm
-                  </h3>
-                </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Missing</p>
+                <h3 id="missingValueCount" class="mt-2 text-xl font-bold sm:text-2xl">0.00 %</h3>
+              </div>
 
-                <div
-                  class="rounded-2xl border border-white/10 bg-slate-950 p-4">
-                  <p class="text-sm text-slate-400">Target</p>
-                  <h3 id="targetMetric" class="mt-2 text-2xl font-bold">
-                    Target
-                  </h3>
-                </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Average Temperature</p>
+                <h3 id="avgTemperatureCount" class="mt-2 text-xl font-bold sm:text-2xl">0 °C</h3>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Stations</p>
+                <h3 id="stationCount" class="mt-2 text-xl font-bold sm:text-2xl">87</h3>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Total Rainfall</p>
+                <h3 id="totalRainfallCount" class="mt-2 text-xl font-bold sm:text-2xl">0 mm</h3>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md dark:border-white/10 dark:bg-slate-950 dark:shadow-none dark:hover:border-cyan-500/30">
+                <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Target</p>
+                <h3 id="targetMetric" class="mt-2 truncate text-xl font-bold sm:text-2xl">Target</h3>
               </div>
             </div>
           </section>
@@ -189,188 +219,165 @@
           <!-- Main Chart -->
           <section id="main-charts" class="main_chart mb-6">
             <h2 class="mb-4 text-lg font-semibold">Main Charts</h2>
-            <div class="grid grid-cols-1 gap-4">
+            <div class="stagger grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div
                 id="time-series-section"
-                class="dist rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125 flex flex-col justify-center">
+                class="dist flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">Time Series Trend</h3>
-                  <p id="trendChartMsg" class="text-slate-500 mt-1">
+                  <h3 class="text-base font-semibold sm:text-lg">Time Series Trend</h3>
+                  <p id="trendChartMsg" class="mt-1 text-sm text-slate-500">
                     Rainfall / temperature / lag feature trend
                   </p>
                 </div>
-                <div id="trendChartContainer" class="relative w-full h-full flex justify-center">
-
+                <div id="trendChartContainer" class="relative flex min-h-[360px] w-full flex-1 justify-center sm:min-h-[440px]">
                   <button id="prevTimeSeriesBtn"
-                    class="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                      class="w-6 h-6 text-white"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        d="M15 19l-7-7 7-7" />
+                    class="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-200/80 p-2 text-slate-700 hover:bg-slate-300 hover:cursor-pointer dark:bg-slate-800/80 dark:text-white dark:hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                
+
                   <div id="timeSeriesTrendChart"
-                    class="p-3 w-450 h-full"
+                    class="h-full w-full"
                     style="transition: transform 0.35s ease, opacity 0.35s ease;">
                   </div>
-                
+
                   <button id="nextTimeSeriesBtn"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                      class="w-6 h-6 text-white"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 5l7 7-7 7" />
+                    class="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-200/80 p-2 text-slate-700 hover:bg-slate-300 hover:cursor-pointer dark:bg-slate-800/80 dark:text-white dark:hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                   </button>
-                
                 </div>
               </div>
 
               <div
                 id="location-analysis-section"
-                class="corr rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
+                class="corr flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">Location Analysis</h3>
-                  <p id="locationChartMsg" class="text-slate-500 mt-1">
+                  <h3 class="text-base font-semibold sm:text-lg">Location Analysis</h3>
+                  <p id="locationChartMsg" class="mt-1 text-sm text-slate-500">
                     Station, geography, elevation, seasonal profile
                   </p>
                 </div>
-                <div id="locationChartContainer" class="relative w-full h-full flex justify-center">
-
+                <div id="locationChartContainer" class="relative flex min-h-[360px] w-full flex-1 justify-center sm:min-h-[440px]">
                   <button id="prevLocationBtn"
-                    class="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                      class="w-6 h-6 text-white"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        d="M15 19l-7-7 7-7" />
+                    class="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-200/80 p-2 text-slate-700 hover:bg-slate-300 hover:cursor-pointer dark:bg-slate-800/80 dark:text-white dark:hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                
+
                   <div id="locationAnalysisChart"
-                    class="p-3 w-450 h-full"
+                    class="h-full w-full"
                     style="transition: transform 0.35s ease, opacity 0.35s ease;">
                   </div>
-                
+
                   <button id="nextLocationBtn"
-                    class="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-slate-800 hover:bg-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                      class="w-6 h-6 text-white"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 5l7 7-7 7" />
+                    class="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-slate-200/80 p-2 text-slate-700 hover:bg-slate-300 hover:cursor-pointer dark:bg-slate-800/80 dark:text-white dark:hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                   </button>
-                
                 </div>
               </div>
 
               <div
                 id="distribution-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">Distribution & Skew</h3>
-                  <p id="histPlotMsg" class="text-slate-500 mt-1">
+                  <h3 class="text-base font-semibold sm:text-lg">Distribution &amp; Skew</h3>
+                  <p id="histPlotMsg" class="mt-1 text-sm text-slate-500">
                     Histogram for selected feature
                   </p>
                 </div>
-                <div id="histogramChart" class="relative w-full h-full flex justify-center"></div>
+                <div id="histogramChart" class="min-h-[360px] w-full flex-1"></div>
               </div>
 
               <div
                 id="boxplot-section"
-                class="scatter rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
-                <div class="mb-4 flex items-start justify-between gap-4">
-                  <h3 class="text-lg font-semibold">Box Plot & Outliers</h3>
-                  <p id="boxPlotChartMsg" class="text-slate-500 mt-1">
+                class="scatter flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+                <div class="mb-4 flex flex-col items-start justify-between">
+                  <h3 class="text-base font-semibold sm:text-lg">Box Plot &amp; Outliers</h3>
+                  <p id="boxPlotChartMsg" class="mt-1 text-sm text-slate-500">
                     Detect extreme values and spread
                   </p>
                 </div>
-                <div id="boxPlotChart" class="p-3 w-full h-full flex justify-center"></div>
+                <div id="boxPlotChart" class="min-h-[360px] w-full flex-1"></div>
               </div>
 
               <div
                 id="scatter-relation-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
-                <div class="mb-4 flex items-start justify-between flex-col">
-                  <h3 class="text-lg font-semibold">Scatter Relation</h3>
-                  <p id="scatterRelationChartMsg" class="text-slate-500 mt-1">
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+                <div class="mb-4 flex flex-col items-start justify-between">
+                  <h3 class="text-base font-semibold sm:text-lg">Scatter Relation</h3>
+                  <p id="scatterRelationChartMsg" class="mt-1 text-sm text-slate-500">
                     Compare feature pairs by season or state
                   </p>
                 </div>
-                <div id="scatterRelationChart" class="p-3 w-full h-full flex justify-center"></div>
-              </div>
-
-              <div
-                id="heatmap-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
-                <div class="mb-4 flex items-start justify-between flex-col">
-                  <h3 class="text-lg font-semibold">Correlation Heatmap</h3>
-                  <p id="heatmapChartMsg" class="text-slate-500 mt-1">
-                    Numeric feature interaction matrix
-                  </p>
-                </div>
-                <div id="heatmapChart" class="p-3 w-full h-full flex justify-center"></div>
+                <div id="scatterRelationChart" class="min-h-[360px] w-full flex-1"></div>
               </div>
 
               <div
                 id="target-corr-section"
-                class="scatter rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
-                <div class="mb-4 flex items-start justify-between flex-col">
-                  <h3 class="text-lg font-semibold">Target Correlation</h3>
-                  <p id="targetCorrChartMsg" class="text-slate-500 mt-1">
+                class="scatter flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+                <div class="mb-4 flex flex-col items-start justify-between">
+                  <h3 class="text-base font-semibold sm:text-lg">Target Correlation</h3>
+                  <p id="targetCorrChartMsg" class="mt-1 text-sm text-slate-500">
                     Feature ranking against target
                   </p>
                 </div>
-                <div id="targetCorrChart" class="p-3 w-full h-full flex justify-center"></div>
+                <div id="targetCorrChart" class="min-h-[360px] w-full flex-1"></div>
+              </div>
+
+              <div
+                id="heatmap-section"
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+                <div class="mb-4 flex flex-col items-start justify-between">
+                  <h3 class="text-base font-semibold sm:text-lg">Correlation Heatmap</h3>
+                  <p id="heatmapChartMsg" class="mt-1 text-sm text-slate-500">
+                    Numeric feature interaction matrix
+                  </p>
+                </div>
+                <div id="heatmapChart" class="min-h-[420px] w-full flex-1"></div>
               </div>
 
               <div
                 id="monthly-trend-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">
-                    Monthly Trend Analysis
-                  </h3>
-                  <p
-                    id="monthlyTrendChartMsg"
-                    class="text-slate-500 mt-1"
-                  >Monthwise target analysis</p>
+                  <h3 class="text-base font-semibold sm:text-lg">Monthly Trend Analysis</h3>
+                  <p id="monthlyTrendChartMsg" class="mt-1 text-sm text-slate-500">
+                    Monthwise target analysis
+                  </p>
                 </div>
-                <div id="monthlyTrendChart" class="p-3 w-full h-full flex justify-center"></div>
+                <div id="monthlyTrendChart" class="min-h-[360px] w-full flex-1"></div>
               </div>
 
               <div
                 id="data-stat-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">Data Stats</h3>
-                  <p id="dataStatChartMsg" class="text-slate-500 mt-1">
-                    Basic describe()
-                  </p>
+                  <h3 class="text-base font-semibold sm:text-lg">Data Stats</h3>
+                  <p id="dataStatChartMsg" class="mt-1 text-sm text-slate-500">Basic describe()</p>
                 </div>
-                <div id="dataStatChart" class="w-full h-min p-2 flex items-start rounded-xl border border-slate-700">
+                <div id="dataStatChart" class="flex w-full items-start rounded-xl border border-slate-200 p-2 dark:border-slate-700">
                   <div class="w-full overflow-auto rounded-xl">
-                    <table id="dataStatTable" class="min-w-full table-auto text-sm text-slate-300"></table>
+                    <table id="dataStatTable" class="min-w-full table-auto text-sm text-slate-700 dark:text-slate-300"></table>
                   </div>
                 </div>
               </div>
 
               <div
                 id="data-preview-section"
-                class="rounded-2xl border border-white/10 bg-slate-950 p-5 min-h-125">
+                class="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-300 hover:border-cyan-500/40 hover:shadow-md sm:p-5 xl:col-span-2 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
                 <div class="mb-4 flex flex-col items-start justify-between">
-                  <h3 class="text-lg font-semibold">Data Preview</h3>
-                  <p id="dataPreviewChartMsg" class="text-slate-500 mt-1">
-                    Sortable preview
-                  </p>
+                  <h3 class="text-base font-semibold sm:text-lg">Data Preview</h3>
+                  <p id="dataPreviewChartMsg" class="mt-1 text-sm text-slate-500">Sortable preview</p>
                 </div>
-                <div id="dataPreviewChart" class="w-full h-100 p-2 flex items-start rounded-xl border border-slate-700">
-                  <div class="w-full h-full overflow-auto rounded-xl">
-                    <table id="dataPreviewTable" class="min-w-full table-auto text-sm text-slate-300"></table>
+                <div id="dataPreviewChart" class="flex h-100 w-full items-start rounded-xl border border-slate-200 p-2 dark:border-slate-700">
+                  <div class="h-full w-full overflow-auto rounded-xl">
+                    <table id="dataPreviewTable" class="min-w-full table-auto text-sm text-slate-700 dark:text-slate-300"></table>
                   </div>
                 </div>
               </div>
@@ -380,5 +387,45 @@
         </main>
       </div>
     </div>
+
+    <script>
+      (function () {
+        // ----- sidebar drawer (mobile) -----
+        const sidebar = document.getElementById("sidebar");
+        const overlay = document.getElementById("sidebarOverlay");
+        const openBtn = document.getElementById("sidebarToggle");
+        const closeBtn = document.getElementById("sidebarClose");
+
+        function openSidebar() {
+          sidebar.classList.remove("-translate-x-full");
+          overlay.classList.remove("hidden");
+        }
+        function closeSidebar() {
+          sidebar.classList.add("-translate-x-full");
+          overlay.classList.add("hidden");
+        }
+
+        openBtn && openBtn.addEventListener("click", openSidebar);
+        closeBtn && closeBtn.addEventListener("click", closeSidebar);
+        overlay && overlay.addEventListener("click", closeSidebar);
+
+        // ----- theme toggle (light / dark) -----
+        const root = document.documentElement;
+        const themeBtn = document.getElementById("themeBtn");
+
+        function setTheme(mode) {
+          if (mode === "dark") root.classList.add("dark");
+          else root.classList.remove("dark");
+          try { localStorage.setItem("theme", mode); } catch (e) {}
+          // re-theme any Plotly charts that are already on screen
+          if (typeof window.applyChartTheme === "function") window.applyChartTheme();
+        }
+
+        themeBtn &&
+          themeBtn.addEventListener("click", () => {
+            setTheme(root.classList.contains("dark") ? "light" : "dark");
+          });
+      })();
+    </script>
   </body>
 </html>
