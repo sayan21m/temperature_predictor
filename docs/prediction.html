@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Temperature Predictor</title>
+    <script>
+      // apply saved theme before paint to avoid a flash of the wrong theme
+      (function () {
+        try {
+          var t = localStorage.getItem("theme") || "dark";
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <link href="./output.css" rel="stylesheet" />
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script type="module" src="./prediction.js"></script>
+  </head>
+  <body class="min-h-dvh bg-slate-100 text-slate-900 antialiased dark:bg-slate-900 dark:text-white">
+
+    <div
+      id="loadingOverlay"
+      class="fixed inset-0 z-9999 flex flex-col items-center justify-center gap-4 bg-white/80 text-slate-700 backdrop-blur-sm dark:bg-slate-950/80 dark:text-slate-200">
+      <div class="h-10 w-10 animate-spin rounded-full border-2 border-slate-300 border-t-cyan-500 dark:border-slate-600 dark:border-t-cyan-400"></div>
+      <span class="text-sm font-medium tracking-wide">Loading climate data…</span>
+    </div>
+
+    <div class="flex min-h-dvh flex-col">
+      <!-- Header -->
+      <header
+        class="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4 dark:border-white/10 dark:bg-slate-950/95">
+        <div class="min-w-0">
+          <h1 class="truncate text-xl font-bold text-cyan-600 sm:text-2xl lg:text-3xl dark:text-cyan-300">
+            Temperature Predictor
+          </h1>
+          <p class="mt-0.5 hidden truncate text-xs text-slate-500 sm:block sm:text-sm dark:text-slate-400">
+            Estimate average, minimum &amp; maximum temperature for any Indian station
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-3">
+          <a
+            href="./index.html"
+            class="hidden items-center rounded-2xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 sm:inline-flex sm:px-4 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+            ← EDA Report
+          </a>
+
+          <button
+            id="themeBtn"
+            aria-label="Toggle theme"
+            title="Toggle light / dark theme"
+            class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 hover:cursor-pointer sm:px-4 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 block dark:hidden">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 hidden dark:block">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+
+        <!-- Methodology note -->
+        <details class="stagger mb-6 rounded-2xl border border-cyan-600/20 bg-cyan-50 p-4 text-sm text-cyan-900 open:pb-4 sm:p-5 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-100">
+          <summary class="cursor-pointer select-none font-semibold">How does this prediction work?</summary>
+          <p class="mt-3 leading-relaxed">
+            Pick a station and date, and live weather is fetched automatically for that location. Those
+            readings are then sent to our trained machine learning model, which predicts the average,
+            minimum and maximum temperature. This is an educational estimate, not an official forecast.
+          </p>
+        </details>
+
+        <!-- Step 1: Location & date -->
+        <section class="stagger mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+          <h2 class="mb-1 text-base font-semibold sm:text-lg">1. Location &amp; date</h2>
+          <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">Pick a station to load its seasonal climate normal.</p>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label for="stateSelect" class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">State</label>
+              <select id="stateSelect" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
+                <option disabled selected value="">Select state</option>
+              </select>
+            </div>
+            <div>
+              <label for="districtSelect" class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">District</label>
+              <select id="districtSelect" disabled class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
+                <option disabled selected value="">Select district</option>
+              </select>
+            </div>
+            <div>
+              <label for="stationSelect" class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Station</label>
+              <select id="stationSelect" disabled class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
+                <option disabled selected value="">Select station</option>
+              </select>
+            </div>
+            <div>
+              <label for="dateInput" class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Date</label>
+              <input id="dateInput" type="date" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span class="text-slate-500 dark:text-slate-400">Resolved:</span>
+            <span id="monthBadge" class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">Month —</span>
+            <span id="seasonBadge" class="rounded-full bg-cyan-600/10 px-3 py-1 font-medium text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300">Season —</span>
+            <span id="climatologySourceNote" class="text-xs text-slate-400 dark:text-slate-500"></span>
+          </div>
+        </section>
+
+        <!-- Step 2: Weather inputs -->
+        <section class="stagger mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+          <h2 class="mb-1 text-base font-semibold sm:text-lg">2. Weather conditions</h2>
+          <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Live conditions are fetched automatically for the city below, or you can type your own values.
+          </p>
+
+          <div class="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-end dark:border-slate-800 dark:bg-slate-900/60">
+            <div class="flex-1">
+              <label for="cityInput" class="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">City</label>
+              <input id="cityInput" type="text" placeholder="e.g. Kolkata" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+            </div>
+            <button id="fetchWeatherBtn" title="Refresh live weather for this city" class="inline-flex items-center gap-2 rounded-lg border border-cyan-600/20 bg-cyan-600 px-4 py-3 text-sm font-medium text-white hover:bg-cyan-700 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+
+          <p id="weatherFetchStatus" class="mb-4 min-h-[1.25rem] text-xs text-slate-500 dark:text-slate-400"></p>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label for="rainfallInput" class="mb-1 flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Rainfall (mm)</span>
+                <span id="rainfallHint" class="text-slate-400 dark:text-slate-500"></span>
+              </label>
+              <input id="rainfallInput" type="number" step="0.1" min="0" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+            </div>
+            <div>
+              <label for="windSpeedInput" class="mb-1 flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Wind speed (m/s)</span>
+                <span id="windSpeedHint" class="text-slate-400 dark:text-slate-500"></span>
+              </label>
+              <input id="windSpeedInput" type="number" step="0.1" min="0" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+            </div>
+            <div>
+              <label for="pressureInput" class="mb-1 flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Air pressure (hPa)</span>
+                <span id="pressureHint" class="text-slate-400 dark:text-slate-500"></span>
+              </label>
+              <input id="pressureInput" type="number" step="0.1" min="800" class="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm outline-none hover:bg-slate-50 focus:border-cyan-500/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" />
+            </div>
+          </div>
+
+          <div class="mt-3 flex justify-end">
+            <button id="resetInputsBtn" class="text-xs font-medium text-cyan-600 hover:underline dark:text-cyan-400">
+              Reset to seasonal average
+            </button>
+          </div>
+        </section>
+
+        <!-- Predict button -->
+        <div class="stagger mb-6 flex justify-center">
+          <button
+            id="predictBtn"
+            disabled
+            class="w-full max-w-xs rounded-2xl border border-cyan-600/20 bg-cyan-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-cyan-700 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+            Predict temperature
+          </button>
+        </div>
+        <p id="predictionSourceNote" class="stagger -mt-4 mb-6 text-center text-xs text-slate-400 dark:text-slate-500"></p>
+
+        <!-- Results -->
+        <section id="resultsSection" class="stagger hidden">
+          <h2 class="mb-4 text-lg font-semibold">Prediction</h2>
+          <div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+              <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Average temperature</p>
+              <h3 id="avgTempResult" class="mt-2 text-3xl font-bold text-cyan-600 dark:text-cyan-300">— °C</h3>
+              <p id="avgTempDelta" class="mt-1 text-xs text-slate-400 dark:text-slate-500"></p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+              <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Minimum temperature</p>
+              <h3 id="minTempResult" class="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-300">— °C</h3>
+              <p id="minTempDelta" class="mt-1 text-xs text-slate-400 dark:text-slate-500"></p>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+              <p class="text-xs text-slate-500 sm:text-sm dark:text-slate-400">Maximum temperature</p>
+              <h3 id="maxTempResult" class="mt-2 text-3xl font-bold text-orange-600 dark:text-orange-300">— °C</h3>
+              <p id="maxTempDelta" class="mt-1 text-xs text-slate-400 dark:text-slate-500"></p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+            <h3 class="mb-4 text-base font-semibold sm:text-lg">Seasonal normal vs. prediction</h3>
+            <div id="comparisonChart" class="min-h-[320px] w-full"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        const root = document.documentElement;
+        const themeBtn = document.getElementById("themeBtn");
+
+        function setTheme(mode) {
+          if (mode === "dark") root.classList.add("dark");
+          else root.classList.remove("dark");
+          try { localStorage.setItem("theme", mode); } catch (e) {}
+          if (typeof window.applyPredictionChartTheme === "function") window.applyPredictionChartTheme();
+        }
+
+        themeBtn &&
+          themeBtn.addEventListener("click", () => {
+            setTheme(root.classList.contains("dark") ? "light" : "dark");
+          });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+{
+  "trained_at": "2026-07-02T05:45:45.675069Z",
+  "feature_cols": [
+    "year",
+    "sin_day",
+    "cos_day",
+    "rainfall",
+    "wind_speed",
+    "air_pressure",
+    "elevation",
+    "latitude",
+    "longitude",
+    "month",
+    "season",
+    "state",
+    "district",
+    "station_name"
+  ],
+  "target_cols": [
+    "avg_temp",
+    "min_temp",
+    "max_temp"
+  ],
+  "numeric_features": [
+    "year",
+    "sin_day",
+    "cos_day",
+    "rainfall",
+    "wind_speed",
+    "air_pressure",
+    "elevation",
+    "latitude",
+    "longitude"
+  ],
+  "categorical_features": [
+    "month",
+    "season",
+    "state",
+    "district",
+    "station_name"
+  ],
+  "model": "HistGradientBoostingRegressor",
+  "holdout_cutoff_date": "2024-01-01",
+  "holdout_metrics": {
+    "avg_temp": {
+      "train_rows": 805740,
+      "test_rows": 164599,
+      "mae": 1.2866137924359797,
+      "rmse": 1.701821770554098,
+      "r2": 0.9147475552248064
+    },
+    "min_temp": {
+      "train_rows": 761924,
+      "test_rows": 164517,
+      "mae": 1.4080169958743567,
+      "rmse": 1.8927174318083524,
+      "r2": 0.911495264321399
+    },
+    "max_temp": {
+      "train_rows": 695495,
+      "test_rows": 164246,
+      "mae": 1.6647500771003783,
+      "rmse": 2.190869089820053,
+      "r2": 0.8547514939747525
+    }
+  }
+}

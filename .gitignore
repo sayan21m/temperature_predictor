@@ -3,3 +3,5 @@ node_modules
 .idea/misc.xml
 data_analysis/.ipynb_checkpoints
 .DS_Store
+api/.venv
+api/__pycache__
