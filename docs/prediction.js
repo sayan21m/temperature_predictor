@@ -5,7 +5,7 @@
 // Deployed FastAPI backend that serves the real trained model (see api/main.py).
 // Replace with your own Render service URL after deploying the api/ folder
 // (see api/README.md).
-const PREDICTION_API_BASE_URL = 'https://temperature-predictor-api.onrender.com';
+const PREDICTION_API_BASE_URL = 'https://temperature-predictor-blrm.onrender.com';
 
 // Demo OpenWeather key so live weather "just works" without asking visitors
 // to sign up for their own account.
