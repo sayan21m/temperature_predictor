@@ -1,9 +1,10 @@
 # India Temperature Predictor 🌤️
 
 An end-to-end machine learning project that explores decades of Indian weather
-data and predicts average, minimum and maximum temperature for any station in
-India — combining live weather conditions with a trained
-`HistGradientBoostingRegressor` model served from a real API.
+data and predicts temperature for any station in India — same-day average,
+minimum and maximum from one model, plus a **7-day average-temperature outlook**
+from a chained multi-horizon forecaster. Live weather from Open-Meteo is sent
+to a FastAPI backend on Render.
 
 **Live demo:** [sayan21m.github.io/temperature_predictor](https://sayan21m.github.io/temperature_predictor/) · [Prediction tool](https://sayan21m.github.io/temperature_predictor/prediction.html)
 
@@ -13,13 +14,14 @@ India — combining live weather conditions with a trained
    wind speed, air pressure, elevation, season) via a full EDA pass —
    missing-value analysis, distributions, correlations, outliers, seasonal
    and geographic trends.
-2. **Trains** a multi-target regression model (`avg_temp`, `min_temp`,
-   `max_temp`) using time-based train/test splits to avoid data leakage, and
-   benchmarks it against CatBoost.
-3. **Serves** the trained model from a FastAPI backend deployed on Render.
-4. **Visualizes** the whole dataset in an interactive dashboard, and lets
-   anyone predict temperature for a real Indian station — auto-filling live
-   weather from Open-Meteo, or entering values manually.
+2. **Trains** two model families on a 2024+ holdout split:
+   - **Same-day** (`avg_temp`, `min_temp`, `max_temp`) — `HistGradientBoostingRegressor`
+   - **Multi-day outlook** (day 0–6 average temp) — chained `LGBMRegressor` models
+3. **Serves** both from a FastAPI backend deployed on Render (`POST /predict`,
+   `POST /forecast`).
+4. **Visualizes** the dataset in an interactive dashboard and lets anyone pick a
+   station, auto-fill live weather from Open-Meteo, and view same-day
+   predictions plus a 7-day line chart.
 
 ## Architecture
 
@@ -27,33 +29,37 @@ India — combining live weather conditions with a trained
 india_weather_rainfall_data.xlsx
         │
         ▼
-data_analysis/            EDA + model training + benchmarking (Jupyter)
+data_analysis/               EDA + model training (Jupyter)
+  analysis.ipynb             same-day avg / min / max
+  forcaster_model.ipynb      7-day chained forecast
         │
-        ├──▶ docs/data.json         pre-aggregated stats consumed by the dashboard
+        ├──▶ docs/data.json              dashboard aggregates
         │
-        └──▶ api/models/*.joblib    trained pipelines, served by the API
+        ├──▶ api/models/*.joblib         same-day models (HistGradientBoosting)
+        └──▶ api/models/forecaster/      7-day models (LightGBM, chained)
                     │
                     ▼
-        api/ (FastAPI, deployed on Render)
+        api/ (FastAPI on Render)
+          POST /predict    same-day avg, min, max
+          POST /forecast   7-day avg-temp outlook
                     │
-                    ▼  POST /predict
-        docs/ (static site, deployed on GitHub Pages)
-          ├─ index.html        EDA dashboard (Plotly)
-          └─ prediction.html   live temperature predictor
+                    ▼
+        docs/ (GitHub Pages)
+          index.html         EDA dashboard (Plotly)
+          prediction.html    predictor UI + charts
 ```
 
-The frontend is a static site (GitHub Pages can't run Python), so predictions
-are served by a small FastAPI backend hosted separately on Render. If that
-backend is unreachable, the prediction button shows an error instead of
-returning a substitute estimate.
+The frontend is static (GitHub Pages cannot run Python), so all ML inference
+happens on Render. If the API is unreachable, the predict button shows an
+error — there is no offline fallback.
 
 ## Tech stack
 
 | Layer | Tools |
 | --- | --- |
-| Data analysis / ML | Python, pandas, NumPy, scikit-learn, CatBoost, seaborn/matplotlib, Jupyter |
+| Data analysis / ML | Python, pandas, NumPy, scikit-learn, LightGBM, CatBoost, seaborn/matplotlib, Jupyter |
 | API | FastAPI, uvicorn, joblib, Pydantic |
-| Frontend | HTML, Tailwind CSS, vanilla JS, Plotly.js |
+| Frontend | HTML, Tailwind CSS, vanilla JS, Plotly.js, Open-Meteo |
 | Hosting | GitHub Pages (frontend), Render (API) |
 
 ## Repository structure
@@ -62,22 +68,24 @@ returning a substitute estimate.
 data_analysis/
   eda.ipynb                 exploratory data analysis
   data_preprocessing.ipynb  cleaning / feature engineering
-  analysis.ipynb            model training, benchmarking, sample predictions
+  analysis.ipynb            same-day model training + benchmarking
+  forcaster_model.ipynb     7-day chained forecast model
   json_dumper.ipynb         builds docs/data.json for the dashboard
   eda_pipeline.py           standalone EDA script
-  json_dumper_pipeline.py   standalone script that regenerates docs/data.json
+  json_dumper_pipeline.py   regenerates docs/data.json
 
 api/
-  main.py                   FastAPI app (GET /health, POST /predict)
-  train_model.py            trains & pickles the models used by main.py
-  models/                   committed, pre-trained model artifacts (~2.5 MB)
+  main.py                   FastAPI (GET /health, POST /predict, POST /forecast)
+  train_model.py            trains same-day models → api/models/
+  train_forecaster.py       trains 7-day models → api/models/forecaster/
+  models/                   committed model artifacts (~35 MB total)
   requirements.txt
-  README.md                 API setup + Render deployment guide
+  README.md                 API setup + Render deployment
 
-docs/                       static site (GitHub Pages root)
+docs/                       GitHub Pages site root
   index.html                EDA dashboard
-  prediction.html           temperature predictor UI
-  prediction.js
+  prediction.html           predictor UI
+  prediction.js             Open-Meteo + API client
   data.json                 pre-aggregated stats for the dashboard
 
 render.yaml                 Render Blueprint for the API service
@@ -89,45 +97,63 @@ render.yaml                 Render Blueprint for the API service
 
 ```bash
 npm install
-npm run serve      # serves docs/ at http://localhost:8080
+npm run serve      # http://localhost:8080
 ```
 
-**API** (required for predictions — the frontend calls `POST /predict`):
+**API** (required for predictions):
 
 ```bash
 cd api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python train_model.py          # trains + pickles the models (run once)
+python train_model.py          # same-day models (run once)
+python train_forecaster.py     # 7-day forecaster (run once; needs the .xlsx)
 uvicorn main:app --reload --port 8000
 ```
 
-Then update `PREDICTION_API_BASE_URL` in `docs/prediction.js` to
-`http://localhost:8000` while testing locally. Full deployment instructions
-(Render + GitHub Pages) are in [`api/README.md`](api/README.md).
+Point `PREDICTION_API_BASE_URL` in `docs/prediction.js` at `http://localhost:8000`
+while testing locally. Full deployment steps are in [`api/README.md`](api/README.md).
 
 ## Model performance
 
-Holdout evaluation on a 2024+ time-based split — trained with 800k+ rows and
-never seeing the test period during training (see `data_analysis/analysis.ipynb`
-and [`api/models/metadata.json`](api/models/metadata.json) for the full numbers):
+Holdout evaluation on data from **2024-01-01** onward (train on earlier years only).
+Full numbers live in `api/models/metadata.json` and
+`api/models/forecaster/metadata.json`.
+
+### Same-day (`HistGradientBoostingRegressor`)
 
 | Target | MAE | RMSE | R² |
 | --- | --- | --- | --- |
-| `avg_temp` | 1.29°C | 1.70°C | 0.91 |
-| `min_temp` | 1.41°C | 1.89°C | 0.91 |
-| `max_temp` | 1.66°C | 2.19°C | 0.85 |
+| `avg_temp` | 0.66°C | 0.93°C | 0.97 |
+| `min_temp` | 0.96°C | 1.30°C | 0.96 |
+| `max_temp` | 1.00°C | 1.38°C | 0.94 |
+
+### 7-day outlook (`LGBMRegressor`, chained from day 2)
+
+| Horizon | MAE | RMSE | R² |
+| --- | --- | --- | --- |
+| Day 0 (`avg_temp`) | 0.66°C | 0.93°C | 0.97 |
+| Day +1 | 0.96°C | 1.30°C | 0.95 |
+| Day +2 | 1.19°C | 1.62°C | 0.92 |
+| Day +3 | 1.31°C | 1.79°C | 0.90 |
+| Day +4 | 1.38°C | 1.87°C | 0.90 |
+| Day +5 | 1.41°C | 1.91°C | 0.89 |
+| Day +6 | 1.43°C | 1.94°C | 0.89 |
 
 ## Known limitations
 
-- Open-Meteo is used directly in the browser for live weather inputs and lag
-  features — no API key required.
-- The Render free plan spins the API down after 15 minutes of inactivity, so
-  the first prediction after a while can take 30-50 seconds ("cold start").
-  The UI shows a loading hint while waiting; if the API is still unavailable,
-  prediction fails with an error message.
-- `india_weather_rainfall_data.xlsx` (~62 MB) is the original raw dataset,
-  included for full reproducibility of the analysis.
+- Open-Meteo is called from the browser for live inputs and historical lag
+  features (bulk fetch for the 14 days before the selected date). No API key
+  required.
+- The Render free plan spins the API down after ~15 minutes of inactivity; the
+  first request after that can take 30–50 seconds. The UI pings `/health` on load
+  and shows “Waking up model…” while waiting.
+- The 7-day chart needs `api/models/forecaster/` deployed on Render. If those
+  artifacts are missing, same-day `/predict` still works and the UI shows a
+  warning for the outlook chart.
+- `india_weather_rainfall_data.xlsx` (~62 MB) is the raw dataset, included for
+  full reproducibility. It is **not** needed at Render runtime if models are
+  committed.
 
 ## License
 
