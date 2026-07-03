@@ -1,8 +1,8 @@
 """Trains and pickles the temperature prediction models used by ``main.py``.
 
 Reproduces the feature engineering from ``data_analysis/analysis.ipynb``
-(date -> year/sin_day/cos_day, no min_temp/max_temp leakage into inputs) and
-saves one HistGradientBoostingRegressor pipeline per target as a joblib file,
+(date -> year/sin_day/cos_day, lag features, state codes as in the spreadsheet,
+no min_temp/max_temp leakage into inputs) and saves one HistGradientBoostingRegressor
 plus a station lookup table so the API can resolve elevation/latitude/
 longitude for a station without the frontend having to send them.
 
@@ -28,20 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = REPO_ROOT / "india_weather_rainfall_data.xlsx"
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 MODELS_DIR.mkdir(exist_ok=True)
-
-# same abbreviation -> full name mapping used by data_analysis/json_dumper_pipeline.py,
-# kept in sync so the state/district values from the website's dropdowns are
-# exactly the categories this model was trained on
-STATE_MAPPING = {
-    "JK": "Jammu and Kashmir", "PB": "Punjab", "HP": "Himachal Pradesh", "HR": "Haryana",
-    "CH": "Chandigarh", "UP": "Uttar Pradesh", "RJ": "Rajasthan", "DL": "Delhi",
-    "AR": "Arunachal Pradesh", "WB": "West Bengal", "SK": "Sikkim", "AS": "Assam",
-    "MP": "Madhya Pradesh", "BR": "Bihar", "ML": "Meghalaya", "NL": "Nagaland",
-    "GJ": "Gujarat", "TR": "Tripura", "MN": "Manipur", "MZ": "Mizoram", "OR": "Odisha",
-    "MH": "Maharashtra", "CT": "Chhattisgarh", "DD": "Daman and Diu", "KA": "Karnataka",
-    "AP": "Andhra Pradesh", "GA": "Goa", "TN": "Tamil Nadu", "LD": "Lakshadweep",
-    "AN": "Andaman and Nicobar Islands", "KL": "Kerala", "PY": "Puducherry",
-}
 
 FEATURE_COLS = [
     "year", "sin_day", "cos_day", "rainfall", "wind_speed", "air_pressure",
@@ -97,9 +83,6 @@ def build_pipeline():
 def main():
     print(f"Loading {DATA_PATH} ...")
     df = pd.read_excel(DATA_PATH)
-    df["state"] = df["state"].map(STATE_MAPPING)
-
-    df = df.dropna(subset=["date_of_record"])
     df["date_of_record"] = pd.to_datetime(df["date_of_record"])
     df["day_of_year"] = df["date_of_record"].dt.dayofyear
     df["year"] = df["date_of_record"].dt.year

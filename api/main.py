@@ -36,6 +36,31 @@ MONTH_TO_SEASON = {
     10: "Post-monsoon", 11: "Post-monsoon",
 }
 
+# analysis.ipynb trains on spreadsheet state codes (e.g. "WB"); docs/data.json uses full names.
+STATE_FULL_TO_CODE = {
+    "Jammu and Kashmir": "JK", "Punjab": "PB", "Himachal Pradesh": "HP", "Haryana": "HR",
+    "Chandigarh": "CH", "Uttar Pradesh": "UP", "Rajasthan": "RJ", "Delhi": "DL",
+    "Arunachal Pradesh": "AR", "West Bengal": "WB", "Sikkim": "SK", "Assam": "AS",
+    "Madhya Pradesh": "MP", "Bihar": "BR", "Meghalaya": "ML", "Nagaland": "NL",
+    "Gujarat": "GJ", "Tripura": "TR", "Manipur": "MN", "Mizoram": "MZ", "Odisha": "OR",
+    "Maharashtra": "MH", "Chhattisgarh": "CT", "Daman and Diu": "DD", "Karnataka": "KA",
+    "Andhra Pradesh": "AP", "Goa": "GA", "Tamil Nadu": "TN", "Lakshadweep": "LD",
+    "Andaman and Nicobar Islands": "AN", "Kerala": "KL", "Puducherry": "PY",
+}
+STATE_CODES = set(STATE_FULL_TO_CODE.values())
+
+
+def resolve_state_code(state: str) -> str:
+    if state in STATE_CODES:
+        return state
+    code = STATE_FULL_TO_CODE.get(state)
+    if code is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown state '{state}'. Use a full state name or two-letter code from the dataset.",
+        )
+    return code
+
 models = {}
 station_lookup = {}
 metadata = {}
@@ -73,7 +98,7 @@ app.add_middleware(
 
 
 class PredictRequest(BaseModel):
-    state: str = Field(..., description="Full state name, e.g. 'West Bengal'")
+    state: str = Field(..., description="Full state name or code, e.g. 'West Bengal' or 'WB'")
     district: str
     station_name: str
     date: date_type = Field(..., description="YYYY-MM-DD")
@@ -109,7 +134,8 @@ def health():
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
-    key = f"{req.state}|{req.district}|{req.station_name}"
+    state_code = resolve_state_code(req.state)
+    key = f"{state_code}|{req.district}|{req.station_name}"
     station = station_lookup.get(key)
     if station is None:
         raise HTTPException(
@@ -136,7 +162,7 @@ def predict(req: PredictRequest):
         "longitude": station["longitude"],
         "month": month,
         "season": season,
-        "state": req.state,
+        "state": state_code,
         "district": req.district,
         "station_name": req.station_name,
         "temp_lag_1": req.temp_lag_1,
@@ -150,22 +176,7 @@ def predict(req: PredictRequest):
         "rain_lag_7": req.rain_lag_7,
     }
 
-    row = pd.DataFrame([row_data])
-
-    lag_fill_defaults = {
-        "temp_lag_1": 0.0,
-        "temp_lag_3": 0.0,
-        "temp_lag_7": 0.0,
-        "temp_max_lag_1": 0.0,
-        "temp_max_lag_3": 0.0,
-        "temp_max_lag_7": 0.0,
-        "rain_lag_1": 0.0,
-        "rain_lag_3": 0.0,
-        "rain_lag_7": 0.0,
-    }
-
-    row = row.reindex(columns=metadata["feature_cols"])
-    row = row.fillna(lag_fill_defaults)
+    row = pd.DataFrame([row_data]).reindex(columns=metadata["feature_cols"])
 
     predictions = {target: float(models[target].predict(row)[0]) for target in metadata["target_cols"]}
 
