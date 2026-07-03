@@ -6,6 +6,9 @@ const PREDICTION_API_BASE_URL = 'https://temperature-predictor-blrm.onrender.com
 const API_TIMEOUT_MS = 45000;
 let data;
 
+// Cached bulk Open-Meteo history (one request per station + base date instead of 11).
+const lagWeatherCache = new Map();
+
 // ---------------------------------------------------------------------------
 // Data loading
 // ---------------------------------------------------------------------------
@@ -265,15 +268,15 @@ function aggregateHourlyWeather(hourly, date) {
     };
 }
 
-function buildOpenMeteoUrl(baseUrl, lat, lon, date) {
+function buildOpenMeteoUrl(baseUrl, lat, lon, startDate, endDate = startDate) {
     const params = new URLSearchParams({
         latitude: String(lat),
         longitude: String(lon),
         hourly: OPEN_METEO_HOURLY,
         wind_speed_unit: 'ms',
         timezone: 'auto',
-        start_date: date,
-        end_date: date
+        start_date: startDate,
+        end_date: endDate
     });
     return `${baseUrl}?${params}`;
 }
@@ -292,6 +295,171 @@ async function fetchHourlyWeather(lat, lon, date) {
             throw new Error(archiveErr.message || forecastErr.message);
         }
     }
+}
+
+/** Group hourly Open-Meteo rows into per-day aggregates for a date range. */
+function aggregateHourlyWeatherByDate(hourly) {
+    const times = hourly.time || [];
+    const temps = hourly.temperature_2m || [];
+    const rains = hourly.precipitation || [];
+    const winds = hourly.wind_speed_10m || [];
+    const pressures = hourly.surface_pressure || [];
+    const buckets = {};
+
+    for (let i = 0; i < times.length; i++) {
+        const date = String(times[i]).slice(0, 10);
+        if (!buckets[date]) {
+            buckets[date] = { tempValues: [], rainValues: [], windValues: [], pressureValues: [] };
+        }
+        const bucket = buckets[date];
+        if (temps[i] != null && Number.isFinite(temps[i])) bucket.tempValues.push(temps[i]);
+        if (rains[i] != null && Number.isFinite(rains[i])) bucket.rainValues.push(rains[i]);
+        if (winds[i] != null && Number.isFinite(winds[i])) bucket.windValues.push(winds[i]);
+        if (pressures[i] != null && Number.isFinite(pressures[i])) bucket.pressureValues.push(pressures[i]);
+    }
+
+    const byDate = {};
+    for (const [date, bucket] of Object.entries(buckets)) {
+        if (!bucket.tempValues.length) continue;
+        const windSpeed = meanOf(bucket.windValues);
+        const pressure = meanOf(bucket.pressureValues);
+        if (windSpeed == null || pressure == null) continue;
+        byDate[date] = {
+            min: Math.min(...bucket.tempValues),
+            max: Math.max(...bucket.tempValues),
+            avg: meanOf(bucket.tempValues),
+            rain: bucket.rainValues.reduce((sum, v) => sum + v, 0),
+            wind_speed: windSpeed,
+            pressure
+        };
+    }
+    return byDate;
+}
+
+function lagWeatherCacheKey(station, baseDateStr) {
+    return `${station}|${baseDateStr}`;
+}
+
+/** Single Open-Meteo request for the 14 days before the selected date (used for all lag features). */
+async function fetchWeatherHistoryBulk(station, baseDateStr, lookbackDays = 14) {
+    const cacheKey = lagWeatherCacheKey(station, baseDateStr);
+    if (lagWeatherCache.has(cacheKey)) {
+        return lagWeatherCache.get(cacheKey);
+    }
+
+    const location = await resolveWeatherLocation(station, '');
+    if (!location) return {};
+
+    const startDate = isoDateOffset(baseDateStr, lookbackDays);
+    const endDate = isoDateOffset(baseDateStr, 1);
+
+    let hourly;
+    try {
+        const json = await fetchOpenMeteoJson(
+            buildOpenMeteoUrl(OPEN_METEO_FORECAST, location.lat, location.lon, startDate, endDate)
+        );
+        hourly = json.hourly;
+    } catch (forecastErr) {
+        try {
+            const json = await fetchOpenMeteoJson(
+                buildOpenMeteoUrl(OPEN_METEO_ARCHIVE, location.lat, location.lon, startDate, endDate)
+            );
+            hourly = json.hourly;
+        } catch (archiveErr) {
+            console.warn('Bulk Open-Meteo fetch failed:', archiveErr.message || forecastErr.message);
+            return {};
+        }
+    }
+
+    const byDate = aggregateHourlyWeatherByDate(hourly);
+    lagWeatherCache.set(cacheKey, byDate);
+    return byDate;
+}
+
+function prefetchLagWeather(station, baseDateStr) {
+    if (!station || !baseDateStr) return;
+    fetchWeatherHistoryBulk(station, baseDateStr).catch(() => {});
+}
+
+/** Ping the Render API early so cold starts overlap with the user picking inputs. */
+function warmPredictionApi() {
+    fetch(`${PREDICTION_API_BASE_URL}/health`, { mode: 'cors' }).catch(() => {});
+}
+
+function weatherAtOffset(byDate, baseDateStr, daysBack) {
+    return byDate[isoDateOffset(baseDateStr, daysBack)] || null;
+}
+
+const EMPTY_LAG_FEATURES = {
+    temp_lag_1: null, temp_lag_3: null, temp_lag_7: null,
+    temp_max_lag_1: null, temp_max_lag_3: null, temp_max_lag_7: null,
+    rain_lag_1: null, rain_lag_3: null, rain_lag_7: null
+};
+
+const EMPTY_FORECASTER_LAGS = {
+    temp_lag_1: null, temp_lag_2: null, temp_lag_3: null, temp_lag_7: null, temp_lag_14: null,
+    temp_max_lag_1: null, temp_max_lag_2: null, temp_max_lag_3: null,
+    temp_max_lag_7: null, temp_max_lag_14: null,
+    rain_lag_1: null, rain_lag_2: null, rain_lag_3: null, rain_lag_7: null, rain_lag_14: null,
+    temp_ma_3: null, temp_ma_7: null, temp_trend_7: null
+};
+
+/** Lag features for both /predict and /forecast from one cached bulk weather fetch. */
+async function getAllLagFeatures(station, baseDateStr) {
+    if (!station || !baseDateStr) {
+        return { lagFeatures: { ...EMPTY_LAG_FEATURES }, forecasterLags: { ...EMPTY_FORECASTER_LAGS } };
+    }
+
+    const byDate = await fetchWeatherHistoryBulk(station, baseDateStr);
+    const snap = (daysBack) => weatherAtOffset(byDate, baseDateStr, daysBack);
+
+    const s1 = snap(1);
+    const s2 = snap(2);
+    const s3 = snap(3);
+    const s7 = snap(7);
+    const s14 = snap(14);
+
+    const lagFeatures = {
+        temp_lag_1: s1 ? parseOptionalNumber(s1.avg) : null,
+        temp_lag_3: s3 ? parseOptionalNumber(s3.avg) : null,
+        temp_lag_7: s7 ? parseOptionalNumber(s7.avg) : null,
+        temp_max_lag_1: s1 ? parseOptionalNumber(s1.max) : null,
+        temp_max_lag_3: s3 ? parseOptionalNumber(s3.max) : null,
+        temp_max_lag_7: s7 ? parseOptionalNumber(s7.max) : null,
+        rain_lag_1: s1 ? parseOptionalNumber(s1.rain) : null,
+        rain_lag_3: s3 ? parseOptionalNumber(s3.rain) : null,
+        rain_lag_7: s7 ? parseOptionalNumber(s7.rain) : null
+    };
+
+    const avgAt = (d) => {
+        const row = snap(d);
+        return row ? parseOptionalNumber(row.avg) : null;
+    };
+    const maxAt = (d) => {
+        const row = snap(d);
+        return row ? parseOptionalNumber(row.max) : null;
+    };
+    const rainAt = (d) => {
+        const row = snap(d);
+        return row ? parseOptionalNumber(row.rain) : null;
+    };
+
+    const temps13 = [1, 2, 3].map(avgAt).filter((v) => v != null);
+    const temps17 = [1, 2, 3, 4, 5, 6, 7].map(avgAt).filter((v) => v != null);
+
+    const forecasterLags = {
+        temp_lag_1: avgAt(1), temp_lag_2: avgAt(2), temp_lag_3: avgAt(3),
+        temp_lag_7: avgAt(7), temp_lag_14: avgAt(14),
+        temp_max_lag_1: maxAt(1), temp_max_lag_2: maxAt(2), temp_max_lag_3: maxAt(3),
+        temp_max_lag_7: maxAt(7), temp_max_lag_14: maxAt(14),
+        rain_lag_1: rainAt(1), rain_lag_2: rainAt(2), rain_lag_3: rainAt(3),
+        rain_lag_7: rainAt(7), rain_lag_14: rainAt(14),
+        temp_ma_3: temps13.length >= 2 ? temps13.reduce((s, v) => s + v, 0) / temps13.length : null,
+        temp_ma_7: temps17.length >= 3 ? temps17.reduce((s, v) => s + v, 0) / temps17.length : null,
+        temp_trend_7: avgAt(1) != null && avgAt(7) != null ? avgAt(1) - avgAt(7) : null
+    };
+
+    return { lagFeatures, forecasterLags };
 }
 
 async function geocodeCity(city) {
@@ -341,74 +509,6 @@ async function safeGetStationWeather(station, dateStr) {
     }
 }
 
-async function getLagFeatures(station, baseDateStr) {
-    if (!station || !baseDateStr) {
-        return {
-            temp_lag_1: null, temp_lag_3: null, temp_lag_7: null,
-            temp_max_lag_1: null, temp_max_lag_3: null, temp_max_lag_7: null,
-            rain_lag_1: null, rain_lag_3: null, rain_lag_7: null
-        };
-    }
-
-    const [lag1, lag3, lag7] = await Promise.all([
-        safeGetStationWeather(station, isoDateOffset(baseDateStr, 1)),
-        safeGetStationWeather(station, isoDateOffset(baseDateStr, 3)),
-        safeGetStationWeather(station, isoDateOffset(baseDateStr, 7))
-    ]);
-
-    return {
-        temp_lag_1: lag1 ? parseOptionalNumber(lag1.avg) : null,
-        temp_lag_3: lag3 ? parseOptionalNumber(lag3.avg) : null,
-        temp_lag_7: lag7 ? parseOptionalNumber(lag7.avg) : null,
-
-        temp_max_lag_1: lag1 ? parseOptionalNumber(lag1.max) : null,
-        temp_max_lag_3: lag3 ? parseOptionalNumber(lag3.max) : null,
-        temp_max_lag_7: lag7 ? parseOptionalNumber(lag7.max) : null,
-
-        rain_lag_1: lag1 ? parseOptionalNumber(lag1.rain) : null,
-        rain_lag_3: lag3 ? parseOptionalNumber(lag3.rain) : null,
-        rain_lag_7: lag7 ? parseOptionalNumber(lag7.rain) : null
-    };
-}
-
-/** Extended lags and rolling means for the chained 7-day forecaster (lags 1–7 and 14). */
-async function getForecasterLagFeatures(station, baseDateStr) {
-    const empty = {
-        temp_lag_1: null, temp_lag_2: null, temp_lag_3: null, temp_lag_7: null, temp_lag_14: null,
-        temp_max_lag_1: null, temp_max_lag_2: null, temp_max_lag_3: null,
-        temp_max_lag_7: null, temp_max_lag_14: null,
-        rain_lag_1: null, rain_lag_2: null, rain_lag_3: null, rain_lag_7: null, rain_lag_14: null,
-        temp_ma_3: null, temp_ma_7: null, temp_trend_7: null
-    };
-    if (!station || !baseDateStr) return empty;
-
-    const offsets = [1, 2, 3, 4, 5, 6, 7, 14];
-    const snapshots = await Promise.all(
-        offsets.map((days) => safeGetStationWeather(station, isoDateOffset(baseDateStr, days)))
-    );
-    const byOffset = {};
-    offsets.forEach((days, i) => { byOffset[days] = snapshots[i]; });
-
-    const avgAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].avg) : null);
-    const maxAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].max) : null);
-    const rainAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].rain) : null);
-
-    const temps13 = [1, 2, 3].map(avgAt).filter((v) => v != null);
-    const temps17 = [1, 2, 3, 4, 5, 6, 7].map(avgAt).filter((v) => v != null);
-
-    return {
-        temp_lag_1: avgAt(1), temp_lag_2: avgAt(2), temp_lag_3: avgAt(3),
-        temp_lag_7: avgAt(7), temp_lag_14: avgAt(14),
-        temp_max_lag_1: maxAt(1), temp_max_lag_2: maxAt(2), temp_max_lag_3: maxAt(3),
-        temp_max_lag_7: maxAt(7), temp_max_lag_14: maxAt(14),
-        rain_lag_1: rainAt(1), rain_lag_2: rainAt(2), rain_lag_3: rainAt(3),
-        rain_lag_7: rainAt(7), rain_lag_14: rainAt(14),
-        temp_ma_3: temps13.length >= 2 ? temps13.reduce((s, v) => s + v, 0) / temps13.length : null,
-        temp_ma_7: temps17.length >= 3 ? temps17.reduce((s, v) => s + v, 0) / temps17.length : null,
-        temp_trend_7: avgAt(1) != null && avgAt(7) != null ? avgAt(1) - avgAt(7) : null
-    };
-}
-
 function formatShortDate(isoDate) {
     const [y, m, d] = isoDate.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -421,6 +521,7 @@ function formatShortDate(isoDate) {
 async function main() {
     try {
         data = await loadData();
+        warmPredictionApi();
     } catch (err) {
         const overlay = document.getElementById('loadingOverlay');
         if (overlay) overlay.style.display = 'none';
@@ -555,12 +656,17 @@ async function main() {
             cityInput.value = guessedCity;
         }
         fetchWeather({ silent: true });
+        prefetchLagWeather(stationSelect.value, dateInput.value);
+        warmPredictionApi();
     });
 
     dateInput.addEventListener('change', () => {
         updateResolvedBadges();
         refreshClimatologyDefaults();
-        if (stationSelect.value) fetchWeather({ silent: true });
+        if (stationSelect.value) {
+            fetchWeather({ silent: true });
+            prefetchLagWeather(stationSelect.value, dateInput.value);
+        }
     });
 
     updateResolvedBadges();
@@ -748,11 +854,13 @@ async function main() {
         }
 
         predictBtn.disabled = true;
+        predictBtn.textContent = 'Predicting…';
+        const wakingUpTimer = setTimeout(() => { predictBtn.textContent = 'Waking up model…'; }, 4000);
 
-        const [lagFeatures, forecasterLags] = await Promise.all([
-            getLagFeatures(stationSelect.value, dateInput.value),
-            getForecasterLagFeatures(stationSelect.value, dateInput.value)
-        ]);
+        const { lagFeatures, forecasterLags } = await getAllLagFeatures(
+            stationSelect.value,
+            dateInput.value
+        );
 
         const inputs = {
             rainfall: Number.isFinite(parseFloat(rainfallInput.value)) ? parseFloat(rainfallInput.value) : 0,
@@ -762,9 +870,6 @@ async function main() {
         };
 
         const climatology = resolved.data;
-
-        predictBtn.textContent = 'Predicting…';
-        const wakingUpTimer = setTimeout(() => { predictBtn.textContent = 'Waking up model…'; }, 4000);
 
         let predicted;
         let forecastDays = null;
