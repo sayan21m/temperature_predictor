@@ -19,7 +19,7 @@ India — combining live weather conditions with a trained
 3. **Serves** the trained model from a FastAPI backend deployed on Render.
 4. **Visualizes** the whole dataset in an interactive dashboard, and lets
    anyone predict temperature for a real Indian station — auto-filling live
-   weather from OpenWeather, or entering values manually.
+   weather from Open-Meteo, or entering values manually.
 
 ## Architecture
 
@@ -120,10 +120,8 @@ and [`api/models/metadata.json`](api/models/metadata.json) for the full numbers)
 
 ## Known limitations
 
-- The OpenWeather API key embedded in `docs/prediction.js` is a shared demo
-  key on the free tier — it can hit rate limits under heavy use. Swap in your
-  own key from [openweathermap.org](https://home.openweathermap.org/users/sign_up)
-  if you fork this.
+- Open-Meteo is used directly in the browser for live weather inputs and lag
+  features — no API key required.
 - The Render free plan spins the API down after 15 minutes of inactivity, so
   the first prediction after a while can take 30-50 seconds ("cold start").
   The UI handles this gracefully with a loading hint and an offline fallback.

@@ -120,6 +120,22 @@ const MONTH_NAMES = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+// analysis.ipynb trains on spreadsheet state codes; data.json dropdowns use full names.
+const STATE_FULL_TO_CODE = {
+    'Jammu and Kashmir': 'JK', 'Punjab': 'PB', 'Himachal Pradesh': 'HP', 'Haryana': 'HR',
+    'Chandigarh': 'CH', 'Uttar Pradesh': 'UP', 'Rajasthan': 'RJ', 'Delhi': 'DL',
+    'Arunachal Pradesh': 'AR', 'West Bengal': 'WB', 'Sikkim': 'SK', 'Assam': 'AS',
+    'Madhya Pradesh': 'MP', 'Bihar': 'BR', 'Meghalaya': 'ML', 'Nagaland': 'NL',
+    'Gujarat': 'GJ', 'Tripura': 'TR', 'Manipur': 'MN', 'Mizoram': 'MZ', 'Odisha': 'OR',
+    'Maharashtra': 'MH', 'Chhattisgarh': 'CT', 'Daman and Diu': 'DD', 'Karnataka': 'KA',
+    'Andhra Pradesh': 'AP', 'Goa': 'GA', 'Tamil Nadu': 'TN', 'Lakshadweep': 'LD',
+    'Andaman and Nicobar Islands': 'AN', 'Kerala': 'KL', 'Puducherry': 'PY'
+};
+
+function resolveStateCode(stateName) {
+    return STATE_FULL_TO_CODE[stateName] || stateName;
+}
+
 function seasonFromMonth(month1to12) {
     if ([12, 1, 2, 3].includes(month1to12)) return 'Winter';
     if ([4, 5, 6].includes(month1to12)) return 'Summer';
@@ -192,7 +208,7 @@ function parseOptionalNumber(value) {
 }
 
 // ---------------------------------------------------------------------------
-// Historical weather (Open-Meteo) for lag features
+// Weather (Open-Meteo) — live inputs and lag features
 // ---------------------------------------------------------------------------
 
 function getCoordinates(stationName) {
@@ -205,53 +221,80 @@ function getCoordinates(stationName) {
     return [station.latitude, station.longitude];
 }
 
-async function getTemp(station, date) {
+function meanOf(values) {
+    const nums = values.filter((v) => v != null && Number.isFinite(v));
+    if (!nums.length) return null;
+    return nums.reduce((sum, v) => sum + v, 0) / nums.length;
+}
+
+async function getStationWeather(station, date) {
     const coordinate = getCoordinates(station);
     if (!coordinate) return null;
 
-    const lat = coordinate[0];
-    const lon = coordinate[1];
-    const timezone = "auto";
-
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&hourly=temperature_2m,precipitation&timezone=${encodeURIComponent(timezone)}`;
+    const [lat, lon] = coordinate;
+    const timezone = 'auto';
+    const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        start_date: date,
+        end_date: date,
+        hourly: 'temperature_2m,precipitation,wind_speed_10m,surface_pressure',
+        wind_speed_unit: 'ms',
+        timezone
+    });
+    const url = `https://api.open-meteo.com/v1/forecast?${params}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
     const json = await res.json();
-    const temps = json.hourly && json.hourly.temperature_2m;
-    const rains = json.hourly && json.hourly.precipitation;
-    const times = json.hourly && json.hourly.time;
+    const hourly = json.hourly || {};
+    const temps = hourly.temperature_2m;
+    const rains = hourly.precipitation;
+    const winds = hourly.wind_speed_10m;
+    const pressures = hourly.surface_pressure;
+    const times = hourly.time;
 
     if (!temps || !times) throw new Error('No hourly temperature data returned');
     if (!rains) throw new Error('No hourly rainfall data returned');
+    if (!winds) throw new Error('No hourly wind data returned');
+    if (!pressures) throw new Error('No hourly pressure data returned');
 
     let tempSum = 0;
+    let tempCount = 0;
     let minTemp = Number.POSITIVE_INFINITY;
     let maxTemp = Number.NEGATIVE_INFINITY;
-
     let rainSum = 0;
 
     for (let i = 0; i < times.length; i++) {
         const t = temps[i];
         const r = rains[i];
 
-        tempSum += t;
-        if (t < minTemp) minTemp = t;
-        if (t > maxTemp) maxTemp = t;
-
-        rainSum += r;
+        if (t != null && Number.isFinite(t)) {
+            tempSum += t;
+            tempCount += 1;
+            if (t < minTemp) minTemp = t;
+            if (t > maxTemp) maxTemp = t;
+        }
+        if (r != null && Number.isFinite(r)) rainSum += r;
     }
 
-    const avgTemp = tempSum / temps.length;
+    if (!tempCount) throw new Error('No valid temperature readings returned');
+
+    const windSpeed = meanOf(winds);
+    const pressure = meanOf(pressures);
+    if (windSpeed == null) throw new Error('No valid wind readings returned');
+    if (pressure == null) throw new Error('No valid pressure readings returned');
 
     return {
         date,
         timezone: json.timezone || timezone,
         min: minTemp,
         max: maxTemp,
-        avg: avgTemp,
-        rain: rainSum
+        avg: tempSum / tempCount,
+        rain: rainSum,
+        wind_speed: windSpeed,
+        pressure
     };
 }
 
@@ -261,11 +304,11 @@ function isoDateOffset(baseDateStr, daysBack) {
     return d.toISOString().split('T')[0];
 }
 
-async function safeGetTemp(station, dateStr) {
+async function safeGetStationWeather(station, dateStr) {
     try {
-        return await getTemp(station, dateStr);
+        return await getStationWeather(station, dateStr);
     } catch (err) {
-        console.warn(`Lag fetch failed for ${dateStr}:`, err.message);
+        console.warn(`Open-Meteo fetch failed for ${dateStr}:`, err.message);
         return null;
     }
 }
@@ -280,9 +323,9 @@ async function getLagFeatures(station, baseDateStr) {
     }
 
     const [lag1, lag3, lag7] = await Promise.all([
-        safeGetTemp(station, isoDateOffset(baseDateStr, 1)),
-        safeGetTemp(station, isoDateOffset(baseDateStr, 3)),
-        safeGetTemp(station, isoDateOffset(baseDateStr, 7))
+        safeGetStationWeather(station, isoDateOffset(baseDateStr, 1)),
+        safeGetStationWeather(station, isoDateOffset(baseDateStr, 3)),
+        safeGetStationWeather(station, isoDateOffset(baseDateStr, 7))
     ]);
 
     return {
@@ -439,61 +482,55 @@ async function main() {
         if (guessedCity && guessedCity !== cityInput.value) {
             cityInput.value = guessedCity;
         }
-        fetchWeather(cityInput.value, { silent: true });
+        fetchWeather({ silent: true });
     });
 
     dateInput.addEventListener('change', () => {
         updateResolvedBadges();
         refreshClimatologyDefaults();
+        if (stationSelect.value) fetchWeather({ silent: true });
     });
 
     updateResolvedBadges();
 
-    let weatherDebounceTimer = null;
-
-    async function fetchWeather(cityRaw, { silent = false } = {}) {
-        const city = (cityRaw || '').trim();
-        if (!city) return;
+    async function fetchWeather({ silent = false } = {}) {
+        const station = stationSelect.value;
+        const date = dateInput.value;
+        if (!station) {
+            if (!silent) showToast('Select a station first.', 'warning');
+            return;
+        }
 
         fetchWeatherBtn.disabled = true;
-        if (!silent) weatherFetchStatus.textContent = 'Fetching live weather…';
+        if (!silent) weatherFetchStatus.textContent = 'Fetching weather from Open-Meteo…';
 
         try {
-            const url = `${PREDICTION_API_BASE_URL}/weather?city=${encodeURIComponent(city)}`;
-            const res = await fetch(url);
-            const json = await res.json();
+            const weather = await getStationWeather(station, date);
+            if (!weather) throw new Error('No coordinates found for this station');
 
-            if (!res.ok) throw new Error(json.detail || `Request failed (${res.status})`);
-
-            const pressure = json.main?.pressure;
-            const wind = json.wind?.speed;
-            const rain = (json.rain && (json.rain['1h'] ?? json.rain['3h'])) ?? 0;
-            const temp = json.main?.temp;
-            const desc = json.weather?.[0]?.description ?? '';
-
-            if (typeof rain === 'number') { rainfallInput.value = rain.toFixed(1); markFieldDirty('rainfall', 'openweather'); }
-            if (typeof wind === 'number') { windSpeedInput.value = wind.toFixed(1); markFieldDirty('wind_speed', 'openweather'); }
-            if (typeof pressure === 'number') { pressureInput.value = pressure.toFixed(1); markFieldDirty('air_pressure', 'openweather'); }
+            rainfallInput.value = weather.rain.toFixed(1);
+            windSpeedInput.value = weather.wind_speed.toFixed(1);
+            pressureInput.value = weather.pressure.toFixed(1);
+            markFieldDirty('rainfall', 'open-meteo');
+            markFieldDirty('wind_speed', 'open-meteo');
+            markFieldDirty('air_pressure', 'open-meteo');
 
             const stamp = new Date().toLocaleTimeString();
             weatherFetchStatus.textContent =
-                `Live for ${json.name || city}: ${temp?.toFixed(1)}°C, ${desc} · pressure ${pressure} hPa · wind ${wind} m/s · rain ${rain.toFixed(1)} mm (as of ${stamp})`;
+                `Open-Meteo for ${station} on ${date}: ${weather.avg.toFixed(1)}°C avg · ` +
+                `pressure ${weather.pressure.toFixed(1)} hPa · wind ${weather.wind_speed.toFixed(1)} m/s · ` +
+                `rain ${weather.rain.toFixed(1)} mm (fetched ${stamp})`;
 
-            if (!silent) showToast('Live weather updated.', 'success');
+            if (!silent) showToast('Weather inputs updated from Open-Meteo.', 'success');
         } catch (err) {
-            if (!silent) showToast(`Could not fetch live weather: ${err.message}`, 'error');
-            weatherFetchStatus.textContent = 'Could not fetch live weather for this city — using seasonal values instead.';
+            if (!silent) showToast(`Could not fetch weather: ${err.message}`, 'error');
+            weatherFetchStatus.textContent = 'Could not fetch Open-Meteo data for this station — using seasonal values instead.';
         } finally {
             fetchWeatherBtn.disabled = false;
         }
     }
 
-    fetchWeatherBtn.addEventListener('click', () => fetchWeather(cityInput.value));
-
-    cityInput.addEventListener('input', () => {
-        clearTimeout(weatherDebounceTimer);
-        weatherDebounceTimer = setTimeout(() => fetchWeather(cityInput.value, { silent: true }), 900);
-    });
+    fetchWeatherBtn.addEventListener('click', () => fetchWeather());
 
     function renderComparisonChart(climatology, predicted) {
         const categories = ['Average', 'Minimum', 'Maximum'];
@@ -525,7 +562,7 @@ async function main() {
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    state: stateSelect.value,
+                    state: resolveStateCode(stateSelect.value),
                     district: districtSelect.value,
                     station_name: stationSelect.value,
                     date: dateInput.value,
