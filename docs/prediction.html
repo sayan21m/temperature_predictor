@@ -72,8 +72,9 @@
           <summary class="cursor-pointer select-none font-semibold">How does this prediction work?</summary>
           <p class="mt-3 leading-relaxed">
             Pick a station and date, and live weather is fetched automatically for that location. Those
-            readings are then sent to our trained machine learning model, which predicts the average,
-            minimum and maximum temperature using our trained machine learning model. This is not an official forecast.
+            readings are then sent to our trained machine learning models: one predicts same-day average,
+            minimum and maximum temperature; another produces a 7-day average-temperature outlook shown
+            in the chart below. This is not an official forecast.
           </p>
         </details>
 
@@ -201,8 +202,20 @@
           </div>
 
           <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
-            <h3 class="mb-4 text-base font-semibold sm:text-lg">Seasonal normal vs. prediction</h3>
+            <h3 class="mb-1 text-base font-semibold sm:text-lg">Seasonal normal vs. prediction</h3>
+            <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">Same-day average, minimum and maximum compared with the station’s seasonal normal.</p>
             <div id="comparisonChart" class="min-h-[320px] w-full"></div>
+          </div>
+
+          <!-- 7-day average-temperature outlook (chained LightGBM forecaster) -->
+          <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-slate-950 dark:shadow-none">
+            <h3 class="mb-1 text-base font-semibold sm:text-lg">7-day temperature outlook</h3>
+            <p class="mb-4 text-sm text-slate-500 dark:text-slate-400">
+              Predicted daily average temperature from the selected date through the next six days.
+              Day&nbsp;2 onward uses recursive chaining (each step feeds the previous prediction).
+            </p>
+            <div id="forecastChart" class="min-h-[320px] w-full"></div>
+            <p id="forecastSourceNote" class="mt-3 text-center text-xs text-slate-400 dark:text-slate-500"></p>
           </div>
         </section>
       </main>

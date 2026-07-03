@@ -47,21 +47,24 @@ const plotlyConfig = {
 
 window.applyPredictionChartTheme = function () {
     if (typeof Plotly === 'undefined') return;
-    const el = document.getElementById('comparisonChart');
-    if (!el || !el.data) return;
     const dark = isDark();
     const grid = dark ? 'rgba(148,163,184,0.18)' : 'rgba(15,23,42,0.10)';
-    try {
-        Plotly.relayout(el, {
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            'font.color': dark ? '#cbd5e1' : '#334155',
-            'xaxis.gridcolor': grid,
-            'yaxis.gridcolor': grid,
-            'xaxis.zerolinecolor': grid,
-            'yaxis.zerolinecolor': grid
-        });
-    } catch (e) { /* chart not rendered yet */ }
+    const relayout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        'font.color': dark ? '#cbd5e1' : '#334155',
+        'xaxis.gridcolor': grid,
+        'yaxis.gridcolor': grid,
+        'xaxis.zerolinecolor': grid,
+        'yaxis.zerolinecolor': grid
+    };
+    ['comparisonChart', 'forecastChart'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el || !el.data) return;
+        try {
+            Plotly.relayout(el, relayout);
+        } catch (e) { /* chart not rendered yet */ }
+    });
 };
 
 // ---------------------------------------------------------------------------
@@ -368,6 +371,49 @@ async function getLagFeatures(station, baseDateStr) {
     };
 }
 
+/** Extended lags and rolling means for the chained 7-day forecaster (lags 1–7 and 14). */
+async function getForecasterLagFeatures(station, baseDateStr) {
+    const empty = {
+        temp_lag_1: null, temp_lag_2: null, temp_lag_3: null, temp_lag_7: null, temp_lag_14: null,
+        temp_max_lag_1: null, temp_max_lag_2: null, temp_max_lag_3: null,
+        temp_max_lag_7: null, temp_max_lag_14: null,
+        rain_lag_1: null, rain_lag_2: null, rain_lag_3: null, rain_lag_7: null, rain_lag_14: null,
+        temp_ma_3: null, temp_ma_7: null, temp_trend_7: null
+    };
+    if (!station || !baseDateStr) return empty;
+
+    const offsets = [1, 2, 3, 4, 5, 6, 7, 14];
+    const snapshots = await Promise.all(
+        offsets.map((days) => safeGetStationWeather(station, isoDateOffset(baseDateStr, days)))
+    );
+    const byOffset = {};
+    offsets.forEach((days, i) => { byOffset[days] = snapshots[i]; });
+
+    const avgAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].avg) : null);
+    const maxAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].max) : null);
+    const rainAt = (d) => (byOffset[d] ? parseOptionalNumber(byOffset[d].rain) : null);
+
+    const temps13 = [1, 2, 3].map(avgAt).filter((v) => v != null);
+    const temps17 = [1, 2, 3, 4, 5, 6, 7].map(avgAt).filter((v) => v != null);
+
+    return {
+        temp_lag_1: avgAt(1), temp_lag_2: avgAt(2), temp_lag_3: avgAt(3),
+        temp_lag_7: avgAt(7), temp_lag_14: avgAt(14),
+        temp_max_lag_1: maxAt(1), temp_max_lag_2: maxAt(2), temp_max_lag_3: maxAt(3),
+        temp_max_lag_7: maxAt(7), temp_max_lag_14: maxAt(14),
+        rain_lag_1: rainAt(1), rain_lag_2: rainAt(2), rain_lag_3: rainAt(3),
+        rain_lag_7: rainAt(7), rain_lag_14: rainAt(14),
+        temp_ma_3: temps13.length >= 2 ? temps13.reduce((s, v) => s + v, 0) / temps13.length : null,
+        temp_ma_7: temps17.length >= 3 ? temps17.reduce((s, v) => s + v, 0) / temps17.length : null,
+        temp_trend_7: avgAt(1) != null && avgAt(7) != null ? avgAt(1) - avgAt(7) : null
+    };
+}
+
+function formatShortDate(isoDate) {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -399,6 +445,7 @@ async function main() {
     const fetchWeatherBtn = document.getElementById('fetchWeatherBtn');
     const weatherFetchStatus = document.getElementById('weatherFetchStatus');
     const predictionSourceNote = document.getElementById('predictionSourceNote');
+    const forecastSourceNote = document.getElementById('forecastSourceNote');
 
     const rainfallInput = document.getElementById('rainfallInput');
     const windSpeedInput = document.getElementById('windSpeedInput');
@@ -587,6 +634,64 @@ async function main() {
         Plotly.react('comparisonChart', traces, themeLayout(layout), plotlyConfig);
     }
 
+    /** Line chart for the 7-day chained average-temperature outlook. */
+    function renderForecastChart(forecastDays, seasonalAvg) {
+        const labels = forecastDays.map((d) => formatShortDate(d.date));
+        const temps = forecastDays.map((d) => d.avg_temp);
+
+        const traces = [
+            {
+                x: labels,
+                y: temps,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Predicted avg temp',
+                line: { color: 'rgb(6,182,212)', width: 3 },
+                marker: { size: 8, color: 'rgb(6,182,212)' },
+                hovertemplate: '%{x}<br>%{y:.1f} °C<extra></extra>'
+            },
+            {
+                x: labels,
+                y: labels.map(() => seasonalAvg),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Seasonal normal',
+                line: { color: 'rgb(148,163,184)', width: 2, dash: 'dash' },
+                hovertemplate: 'Normal: %{y:.1f} °C<extra></extra>'
+            }
+        ];
+
+        const layout = {
+            margin: { t: 20, b: 70, l: 50, r: 15 },
+            yaxis: { title: 'Average temperature (°C)' },
+            xaxis: { title: 'Forecast day', tickangle: -35 },
+            legend: { orientation: 'h', y: -0.35 }
+        };
+
+        Plotly.react('forecastChart', traces, themeLayout(layout), plotlyConfig);
+    }
+
+    function buildApiPayload(inputs) {
+        return {
+            state: resolveStateCode(stateSelect.value),
+            district: districtSelect.value,
+            station_name: stationSelect.value,
+            date: dateInput.value,
+            rainfall: inputs.rainfall,
+            wind_speed: inputs.wind_speed,
+            air_pressure: inputs.air_pressure,
+            temp_lag_1: inputs.temp_lag_1,
+            temp_lag_3: inputs.temp_lag_3,
+            temp_lag_7: inputs.temp_lag_7,
+            temp_max_lag_1: inputs.temp_max_lag_1,
+            temp_max_lag_3: inputs.temp_max_lag_3,
+            temp_max_lag_7: inputs.temp_max_lag_7,
+            rain_lag_1: inputs.rain_lag_1,
+            rain_lag_3: inputs.rain_lag_3,
+            rain_lag_7: inputs.rain_lag_7
+        };
+    }
+
     async function predictViaApi(inputs) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
@@ -596,24 +701,7 @@ async function main() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify({
-                    state: resolveStateCode(stateSelect.value),
-                    district: districtSelect.value,
-                    station_name: stationSelect.value,
-                    date: dateInput.value,
-                    rainfall: inputs.rainfall,
-                    wind_speed: inputs.wind_speed,
-                    air_pressure: inputs.air_pressure,
-                    temp_lag_1: inputs.temp_lag_1,
-                    temp_lag_3: inputs.temp_lag_3,
-                    temp_lag_7: inputs.temp_lag_7,
-                    temp_max_lag_1: inputs.temp_max_lag_1,
-                    temp_max_lag_3: inputs.temp_max_lag_3,
-                    temp_max_lag_7: inputs.temp_max_lag_7,
-                    rain_lag_1: inputs.rain_lag_1,
-                    rain_lag_3: inputs.rain_lag_3,
-                    rain_lag_7: inputs.rain_lag_7
-                })
+                body: JSON.stringify(buildApiPayload(inputs))
             });
 
             if (!res.ok) {
@@ -623,6 +711,30 @@ async function main() {
 
             const json = await res.json();
             return { avg_temp: json.avg_temp, min_temp: json.min_temp, max_temp: json.max_temp };
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    async function forecastViaApi(inputs, forecasterLags) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+        try {
+            const res = await fetch(`${PREDICTION_API_BASE_URL}/forecast`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({ ...buildApiPayload(inputs), ...forecasterLags })
+            });
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.detail ? JSON.stringify(body.detail) : `Forecast API returned ${res.status}`);
+            }
+
+            const json = await res.json();
+            return json.forecasts;
         } finally {
             clearTimeout(timeout);
         }
@@ -638,7 +750,10 @@ async function main() {
         predictBtn.disabled = true;
         predictBtn.textContent = 'Fetching historical data…';
 
-        const lagFeatures = await getLagFeatures(stationSelect.value, dateInput.value);
+        const [lagFeatures, forecasterLags] = await Promise.all([
+            getLagFeatures(stationSelect.value, dateInput.value),
+            getForecasterLagFeatures(stationSelect.value, dateInput.value)
+        ]);
 
         const inputs = {
             rainfall: Number.isFinite(parseFloat(rainfallInput.value)) ? parseFloat(rainfallInput.value) : 0,
@@ -653,11 +768,25 @@ async function main() {
         const wakingUpTimer = setTimeout(() => { predictBtn.textContent = 'Waking up model…'; }, 4000);
 
         let predicted;
+        let forecastDays = null;
+        let forecastError = null;
         try {
-            predicted = await predictViaApi(inputs);
+            const [predictResult, forecastResult] = await Promise.allSettled([
+                predictViaApi(inputs),
+                forecastViaApi(inputs, forecasterLags)
+            ]);
+            if (predictResult.status === 'rejected') throw predictResult.reason;
+            predicted = predictResult.value;
+            if (forecastResult.status === 'fulfilled') {
+                forecastDays = forecastResult.value;
+            } else {
+                forecastError = forecastResult.reason;
+                console.warn('7-day forecast failed:', forecastError);
+            }
         } catch (err) {
             resultsSection.classList.add('hidden');
             predictionSourceNote.textContent = '';
+            if (forecastSourceNote) forecastSourceNote.textContent = '';
             const message = err.name === 'AbortError'
                 ? 'Prediction timed out. The model API may be waking up — try again in a moment.'
                 : `Prediction failed: ${err.message}`;
@@ -669,8 +798,21 @@ async function main() {
             predictBtn.textContent = 'Predict temperature';
         }
 
-        predictionSourceNote.textContent = 'Predicted using our trained machine learning model.';
-        showToast('Prediction ready.', 'success');
+        predictionSourceNote.textContent = 'Same-day min / max / avg from the gradient-boosting model.';
+        if (forecastDays && forecastDays.length) {
+            forecastSourceNote.textContent =
+                '7-day outlook from the chained LightGBM forecaster (day 2+ uses prior-step predictions).';
+            showToast('Prediction and 7-day outlook ready.', 'success');
+        } else {
+            forecastSourceNote.textContent =
+                forecastError
+                    ? '7-day forecast unavailable — redeploy the API after running train_forecaster.py.'
+                    : '';
+            showToast(
+                forecastError ? 'Same-day prediction ready; 7-day forecast unavailable.' : 'Prediction ready.',
+                forecastError ? 'warning' : 'success'
+            );
+        }
 
         avgTempResult.textContent = `${predicted.avg_temp.toFixed(1)} °C`;
         minTempResult.textContent = `${predicted.min_temp.toFixed(1)} °C`;
@@ -682,6 +824,11 @@ async function main() {
 
         resultsSection.classList.remove('hidden');
         renderComparisonChart(climatology, predicted);
+        if (forecastDays && forecastDays.length) {
+            renderForecastChart(forecastDays, climatology.avg_temp);
+        } else {
+            Plotly.purge('forecastChart');
+        }
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 }
