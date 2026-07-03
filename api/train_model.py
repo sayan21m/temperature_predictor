@@ -45,6 +45,7 @@ NUMERIC_FEATURES = [
 ]
 CATEGORICAL_FEATURES = ["month", "season", "state", "district", "station_name"]
 
+STATION_GROUP = ["state", "district", "station_name"]
 CUTOFF_DATE = "2024-01-01"
 
 
@@ -89,19 +90,13 @@ def main():
     df["sin_day"] = np.sin(2 * np.pi * df["day_of_year"] / 365.25)
     df["cos_day"] = np.cos(2 * np.pi * df["day_of_year"] / 365.25)
 
-    df["temp_lag_1"] = df['avg_temp'].shift(1)
-    df["temp_lag_3"] = df['avg_temp'].shift(3)
-    df["temp_lag_7"] = df['avg_temp'].shift(7)
+    df = df.sort_values([*STATION_GROUP, "date_of_record"])
 
-    df["temp_max_lag_1"] = df['max_temp'].shift(1)
-    df["temp_max_lag_3"] = df['max_temp'].shift(3)
-    df["temp_max_lag_7"] = df['max_temp'].shift(7)
+    for lag in [1, 3, 7]:
+        df[f"temp_lag_{lag}"] = df.groupby(STATION_GROUP)["avg_temp"].shift(lag)
+        df[f"temp_max_lag_{lag}"] = df.groupby(STATION_GROUP)["max_temp"].shift(lag)
+        df[f"rain_lag_{lag}"] = df.groupby(STATION_GROUP)["rainfall"].shift(lag)
 
-    df["rain_lag_1"] = df['rainfall'].shift(1)
-    df["rain_lag_3"] = df['rainfall'].shift(3)
-    df["rain_lag_7"] = df['rainfall'].shift(7)
-
-    df = df.sort_values("date_of_record")
     train = df[df["date_of_record"] < CUTOFF_DATE]
     test = df[df["date_of_record"] >= CUTOFF_DATE]
 

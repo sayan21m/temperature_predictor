@@ -124,9 +124,9 @@ Full numbers live in `api/models/metadata.json` and
 
 | Target | MAE | RMSE | R² |
 | --- | --- | --- | --- |
-| `avg_temp` | 0.66°C | 0.93°C | 0.97 |
-| `min_temp` | 0.96°C | 1.30°C | 0.96 |
-| `max_temp` | 1.00°C | 1.38°C | 0.94 |
+| `avg_temp` | 0.67°C | 0.95°C | 0.97 |
+| `min_temp` | 0.97°C | 1.32°C | 0.96 |
+| `max_temp` | 1.01°C | 1.40°C | 0.94 |
 
 ### 7-day outlook (`LGBMRegressor`, chained from day 2)
 

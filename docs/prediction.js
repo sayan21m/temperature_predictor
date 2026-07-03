@@ -902,10 +902,11 @@ async function main() {
             predictBtn.textContent = 'Predict temperature';
         }
 
-        predictionSourceNote.textContent = 'Same-day min / max / avg from the gradient-boosting model.';
+        predictionSourceNote.textContent =
+            'Same-day avg, min and max from HistGradientBoosting.';
         if (forecastDays && forecastDays.length) {
             forecastSourceNote.textContent =
-                '7-day outlook from the chained LightGBM forecaster (day 2+ uses prior-step predictions).';
+                '7-day average-temperature line from chained LightGBM. Day 0 may differ from the avg card above.';
             showToast('Prediction and 7-day outlook ready.', 'success');
         } else {
             forecastSourceNote.textContent =
