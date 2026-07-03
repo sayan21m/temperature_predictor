@@ -748,7 +748,6 @@ async function main() {
         }
 
         predictBtn.disabled = true;
-        predictBtn.textContent = 'Fetching historical data…';
 
         const [lagFeatures, forecasterLags] = await Promise.all([
             getLagFeatures(stationSelect.value, dateInput.value),
