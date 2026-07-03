@@ -2,14 +2,9 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-// Deployed FastAPI backend that serves the real trained model (see api/main.py).
-// Replace with your own Render service URL after deploying the api/ folder
-// (see api/README.md).
 const PREDICTION_API_BASE_URL = 'https://temperature-predictor-blrm.onrender.com';
-
-// Demo OpenWeather key so live weather "just works" without asking visitors
-// to sign up for their own account.
-const OWM_API_KEY = '654d34ce81a03e3885a61327d46270f1';
+const API_TIMEOUT_MS = 45000;
+let data;
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -45,8 +40,6 @@ function themeLayout(layout = {}) {
     return layout;
 }
 
-// this is a simple 2-bar comparison chart, not something users need to zoom/pan;
-// the modebar just gets in the way (and overlaps the chart) on narrow screens
 const plotlyConfig = {
     responsive: true,
     displayModeBar: false
@@ -127,9 +120,6 @@ const MONTH_NAMES = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// matches the season actually assigned per month in india_weather_rainfall_data.xlsx
-// (NOT the standard IMD Mar-May "summer" convention: this dataset's Winter runs
-// through March, and Summer starts in April)
 function seasonFromMonth(month1to12) {
     if ([12, 1, 2, 3].includes(month1to12)) return 'Winter';
     if ([4, 5, 6].includes(month1to12)) return 'Summer';
@@ -137,8 +127,6 @@ function seasonFromMonth(month1to12) {
     return 'Post-monsoon';
 }
 
-// walks state -> district -> station -> season, falling back to the
-// coarsest level available so a prediction is always possible
 function resolveClimatology(data, stateName, districtName, stationName, season) {
     const stateData = data.kpi_data[stateName];
     if (!stateData) return null;
@@ -167,8 +155,6 @@ function getStatsRow(data, indexName) {
     return data.stats.find((row) => row.index === indexName) || {};
 }
 
-// climate-normal baseline + linear nudge from the correlation/std relationship
-// measured across the whole dataset for rainfall, wind speed and air pressure
 function predictTemperatures(data, climatology, inputs) {
     const std = getStatsRow(data, 'std');
     const result = {};
@@ -183,7 +169,6 @@ function predictTemperatures(data, climatology, inputs) {
         result[target] = value;
     }
 
-    // keep the three values in a sensible order for display
     if (result.min_temp > result.avg_temp) result.min_temp = result.avg_temp;
     if (result.max_temp < result.avg_temp) result.max_temp = result.avg_temp;
 
@@ -201,12 +186,125 @@ function formatDelta(predicted, normal) {
     return `${sign}${diff.toFixed(1)}°C vs. seasonal normal (${normal.toFixed(1)}°C)`;
 }
 
+function parseOptionalNumber(value) {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+// ---------------------------------------------------------------------------
+// Historical weather (Open-Meteo) for lag features
+// ---------------------------------------------------------------------------
+
+function getCoordinates(stationName) {
+    const station = data.lat_long.find(
+        i => i.station_name === stationName
+    );
+
+    if (!station) return null;
+
+    return [station.latitude, station.longitude];
+}
+
+async function getTemp(station, date) {
+    const coordinate = getCoordinates(station);
+    if (!coordinate) return null;
+
+    const lat = coordinate[0];
+    const lon = coordinate[1];
+    const timezone = "auto";
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&hourly=temperature_2m,precipitation&timezone=${encodeURIComponent(timezone)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+    const json = await res.json();
+    const temps = json.hourly && json.hourly.temperature_2m;
+    const rains = json.hourly && json.hourly.precipitation;
+    const times = json.hourly && json.hourly.time;
+
+    if (!temps || !times) throw new Error('No hourly temperature data returned');
+    if (!rains) throw new Error('No hourly rainfall data returned');
+
+    let tempSum = 0;
+    let minTemp = Number.POSITIVE_INFINITY;
+    let maxTemp = Number.NEGATIVE_INFINITY;
+
+    let rainSum = 0;
+
+    for (let i = 0; i < times.length; i++) {
+        const t = temps[i];
+        const r = rains[i];
+
+        tempSum += t;
+        if (t < minTemp) minTemp = t;
+        if (t > maxTemp) maxTemp = t;
+
+        rainSum += r;
+    }
+
+    const avgTemp = tempSum / temps.length;
+
+    return {
+        date,
+        timezone: json.timezone || timezone,
+        min: minTemp,
+        max: maxTemp,
+        avg: avgTemp,
+        rain: rainSum
+    };
+}
+
+function isoDateOffset(baseDateStr, daysBack) {
+    const d = new Date(baseDateStr);
+    d.setDate(d.getDate() - daysBack);
+    return d.toISOString().split('T')[0];
+}
+
+async function safeGetTemp(station, dateStr) {
+    try {
+        return await getTemp(station, dateStr);
+    } catch (err) {
+        console.warn(`Lag fetch failed for ${dateStr}:`, err.message);
+        return null;
+    }
+}
+
+async function getLagFeatures(station, baseDateStr) {
+    if (!station || !baseDateStr) {
+        return {
+            temp_lag_1: null, temp_lag_3: null, temp_lag_7: null,
+            temp_max_lag_1: null, temp_max_lag_3: null, temp_max_lag_7: null,
+            rain_lag_1: null, rain_lag_3: null, rain_lag_7: null
+        };
+    }
+
+    const [lag1, lag3, lag7] = await Promise.all([
+        safeGetTemp(station, isoDateOffset(baseDateStr, 1)),
+        safeGetTemp(station, isoDateOffset(baseDateStr, 3)),
+        safeGetTemp(station, isoDateOffset(baseDateStr, 7))
+    ]);
+
+    return {
+        temp_lag_1: lag1 ? parseOptionalNumber(lag1.avg) : null,
+        temp_lag_3: lag3 ? parseOptionalNumber(lag3.avg) : null,
+        temp_lag_7: lag7 ? parseOptionalNumber(lag7.avg) : null,
+
+        temp_max_lag_1: lag1 ? parseOptionalNumber(lag1.max) : null,
+        temp_max_lag_3: lag3 ? parseOptionalNumber(lag3.max) : null,
+        temp_max_lag_7: lag7 ? parseOptionalNumber(lag7.max) : null,
+
+        rain_lag_1: lag1 ? parseOptionalNumber(lag1.rain) : null,
+        rain_lag_3: lag3 ? parseOptionalNumber(lag3.rain) : null,
+        rain_lag_7: lag7 ? parseOptionalNumber(lag7.rain) : null
+    };
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main() {
-    let data;
     try {
         data = await loadData();
     } catch (err) {
@@ -221,7 +319,6 @@ async function main() {
         return;
     }
 
-    // ----- elements -----
     const stateSelect = document.getElementById('stateSelect');
     const districtSelect = document.getElementById('districtSelect');
     const stationSelect = document.getElementById('stationSelect');
@@ -238,6 +335,7 @@ async function main() {
     const rainfallInput = document.getElementById('rainfallInput');
     const windSpeedInput = document.getElementById('windSpeedInput');
     const pressureInput = document.getElementById('pressureInput');
+
     const rainfallHint = document.getElementById('rainfallHint');
     const windSpeedHint = document.getElementById('windSpeedHint');
     const pressureHint = document.getElementById('pressureHint');
@@ -256,19 +354,12 @@ async function main() {
     const fieldHints = { rainfall: rainfallHint, wind_speed: windSpeedHint, air_pressure: pressureHint };
     const fieldSource = { rainfall: 'climatology', wind_speed: 'climatology', air_pressure: 'climatology' };
 
-    // ----- default date = today -----
     const today = new Date();
     dateInput.value = today.toISOString().slice(0, 10);
 
-    // ----- populate state dropdown -----
     const stateNames = Object.keys(data.kpi_data).sort();
     stateSelect.innerHTML = ['<option disabled selected value="">Select state</option>',
         ...stateNames.map((s) => `<option value="${s}">${s}</option>`)].join('');
-
-    function currentSeason() {
-        const [, month] = dateInput.value.split('-').map(Number);
-        return seasonFromMonth(month);
-    }
 
     function updateResolvedBadges() {
         const [, month] = dateInput.value.split('-').map(Number);
@@ -284,8 +375,6 @@ async function main() {
         return resolveClimatology(data, stateSelect.value, districtSelect.value, stationSelect.value, season);
     }
 
-    // fills the three weather fields from climatology, unless the user (or
-    // OpenWeather) already supplied a value for that specific field
     function refreshClimatologyDefaults() {
         const resolved = currentClimatology();
         if (!resolved) return;
@@ -360,7 +449,6 @@ async function main() {
 
     updateResolvedBadges();
 
-    // ----- automatic live weather (no API key/URL ever shown to the user) -----
     let weatherDebounceTimer = null;
 
     async function fetchWeather(cityRaw, { silent = false } = {}) {
@@ -371,11 +459,11 @@ async function main() {
         if (!silent) weatherFetchStatus.textContent = 'Fetching live weather…';
 
         try {
-            const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},IN&units=metric&appid=${OWM_API_KEY}`;
+            const url = `${PREDICTION_API_BASE_URL}/weather?city=${encodeURIComponent(city)}`;
             const res = await fetch(url);
             const json = await res.json();
 
-            if (!res.ok) throw new Error(json.message || `Request failed (${res.status})`);
+            if (!res.ok) throw new Error(json.detail || `Request failed (${res.status})`);
 
             const pressure = json.main?.pressure;
             const wind = json.wind?.speed;
@@ -390,6 +478,7 @@ async function main() {
             const stamp = new Date().toLocaleTimeString();
             weatherFetchStatus.textContent =
                 `Live for ${json.name || city}: ${temp?.toFixed(1)}°C, ${desc} · pressure ${pressure} hPa · wind ${wind} m/s · rain ${rain.toFixed(1)} mm (as of ${stamp})`;
+
             if (!silent) showToast('Live weather updated.', 'success');
         } catch (err) {
             if (!silent) showToast(`Could not fetch live weather: ${err.message}`, 'error');
@@ -406,7 +495,6 @@ async function main() {
         weatherDebounceTimer = setTimeout(() => fetchWeather(cityInput.value, { silent: true }), 900);
     });
 
-    // ----- prediction -----
     function renderComparisonChart(climatology, predicted) {
         const categories = ['Average', 'Minimum', 'Maximum'];
         const normalValues = [climatology.avg_temp, climatology.min_temp, climatology.max_temp];
@@ -427,13 +515,9 @@ async function main() {
         Plotly.react('comparisonChart', traces, themeLayout(layout), plotlyConfig);
     }
 
-    // calls the real trained model behind the hosted backend; throws on any
-    // network error, non-2xx response, or timeout so the caller can fall back.
-    // Render's free plan spins the service down after inactivity, so a "cold
-    // start" can take up to ~30-50s — the timeout below accommodates that.
     async function predictViaApi(inputs) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000);
+        const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
         try {
             const res = await fetch(`${PREDICTION_API_BASE_URL}/predict`, {
@@ -447,7 +531,16 @@ async function main() {
                     date: dateInput.value,
                     rainfall: inputs.rainfall,
                     wind_speed: inputs.wind_speed,
-                    air_pressure: inputs.air_pressure
+                    air_pressure: inputs.air_pressure,
+                    temp_lag_1: inputs.temp_lag_1,
+                    temp_lag_3: inputs.temp_lag_3,
+                    temp_lag_7: inputs.temp_lag_7,
+                    temp_max_lag_1: inputs.temp_max_lag_1,
+                    temp_max_lag_3: inputs.temp_max_lag_3,
+                    temp_max_lag_7: inputs.temp_max_lag_7,
+                    rain_lag_1: inputs.rain_lag_1,
+                    rain_lag_3: inputs.rain_lag_3,
+                    rain_lag_7: inputs.rain_lag_7
                 })
             });
 
@@ -465,17 +558,25 @@ async function main() {
 
     predictBtn.addEventListener('click', async () => {
         const resolved = currentClimatology();
-        if (!resolved) { showToast('Select a state, district and station first.', 'warning'); return; }
+        if (!resolved) {
+            showToast('Select a state, district and station first.', 'warning');
+            return;
+        }
+
+        predictBtn.disabled = true;
+        predictBtn.textContent = 'Fetching historical data…';
+
+        const lagFeatures = await getLagFeatures(stationSelect.value, dateInput.value);
 
         const inputs = {
-            rainfall: parseFloat(rainfallInput.value) || 0,
-            wind_speed: parseFloat(windSpeedInput.value) || 0,
-            air_pressure: parseFloat(pressureInput.value) || 0
+            rainfall: Number.isFinite(parseFloat(rainfallInput.value)) ? parseFloat(rainfallInput.value) : 0,
+            wind_speed: Number.isFinite(parseFloat(windSpeedInput.value)) ? parseFloat(windSpeedInput.value) : 0,
+            air_pressure: Number.isFinite(parseFloat(pressureInput.value)) ? parseFloat(pressureInput.value) : 0,
+            ...lagFeatures
         };
 
         const climatology = resolved.data;
 
-        predictBtn.disabled = true;
         predictBtn.textContent = 'Predicting…';
         const wakingUpTimer = setTimeout(() => { predictBtn.textContent = 'Waking up model…'; }, 4000);
 

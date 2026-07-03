@@ -232,6 +232,8 @@ try:
     skewness = df.skew(numeric_only=True).to_dict()
     kurt = df.kurtosis(numeric_only=True).to_dict()
 
+    coord = df[['station_name', 'latitude', 'longitude']].drop_duplicates().to_dict(orient='records')
+
     data = {
         # dataset details
         "shape":df.shape,
@@ -303,6 +305,9 @@ try:
 
         # monthly trend
         "monthly_trend": monthly_trend.to_dict(orient='records'),
+
+        # co-ordinates
+        'lat_long': coord,
 
         # data stats
         'stats': stat,

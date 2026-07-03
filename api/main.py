@@ -25,9 +25,6 @@ from pydantic import BaseModel, Field
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 
-# Dec/Jan/Feb/Mar = Winter, Apr/May/Jun = Summer, Jul/Aug/Sep = Monsoon, Oct/Nov = Post-monsoon
-# (matches the season column actually assigned in india_weather_rainfall_data.xlsx,
-# NOT the standard IMD Mar-May "summer" convention)
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -64,9 +61,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Temperature Predictor API", version="1.0.0", lifespan=lifespan)
 
-# defaults to permissive CORS so the demo works immediately; set the
-# ALLOWED_ORIGINS env var (comma-separated) on Render once you know your
-# GitHub Pages URL, e.g. https://<user>.github.io, to lock this down
 _origins_env = os.environ.get("ALLOWED_ORIGINS", "*").strip()
 _allow_origins = ["*"] if _origins_env == "*" else [o.strip() for o in _origins_env.split(",") if o.strip()]
 
@@ -83,9 +77,22 @@ class PredictRequest(BaseModel):
     district: str
     station_name: str
     date: date_type = Field(..., description="YYYY-MM-DD")
+
     rainfall: float = Field(..., ge=0, description="mm")
     wind_speed: float = Field(..., ge=0, description="m/s")
     air_pressure: float = Field(..., ge=800, description="hPa")
+
+    temp_lag_1: float | None = Field(None, description="Previous 1-day average temperature")
+    temp_lag_3: float | None = Field(None, description="Previous 3-day average temperature")
+    temp_lag_7: float | None = Field(None, description="Previous 7-day average temperature")
+
+    temp_max_lag_1: float | None = Field(None, description="Previous 1-day maximum temperature")
+    temp_max_lag_3: float | None = Field(None, description="Previous 3-day maximum temperature")
+    temp_max_lag_7: float | None = Field(None, description="Previous 7-day maximum temperature")
+
+    rain_lag_1: float | None = Field(None, ge=0, description="Previous 1-day rainfall")
+    rain_lag_3: float | None = Field(None, ge=0, description="Previous 3-day rainfall")
+    rain_lag_7: float | None = Field(None, ge=0, description="Previous 7-day rainfall")
 
 
 class PredictResponse(BaseModel):
@@ -117,7 +124,7 @@ def predict(req: PredictRequest):
     month = MONTH_NAMES[req.date.month - 1]
     season = MONTH_TO_SEASON[req.date.month]
 
-    row = pd.DataFrame([{
+    row_data = {
         "year": req.date.year,
         "sin_day": np.sin(2 * np.pi * day_of_year / 365.25),
         "cos_day": np.cos(2 * np.pi * day_of_year / 365.25),
@@ -132,11 +139,36 @@ def predict(req: PredictRequest):
         "state": req.state,
         "district": req.district,
         "station_name": req.station_name,
-    }])[metadata["feature_cols"]]
+        "temp_lag_1": req.temp_lag_1,
+        "temp_lag_3": req.temp_lag_3,
+        "temp_lag_7": req.temp_lag_7,
+        "temp_max_lag_1": req.temp_max_lag_1,
+        "temp_max_lag_3": req.temp_max_lag_3,
+        "temp_max_lag_7": req.temp_max_lag_7,
+        "rain_lag_1": req.rain_lag_1,
+        "rain_lag_3": req.rain_lag_3,
+        "rain_lag_7": req.rain_lag_7,
+    }
+
+    row = pd.DataFrame([row_data])
+
+    lag_fill_defaults = {
+        "temp_lag_1": 0.0,
+        "temp_lag_3": 0.0,
+        "temp_lag_7": 0.0,
+        "temp_max_lag_1": 0.0,
+        "temp_max_lag_3": 0.0,
+        "temp_max_lag_7": 0.0,
+        "rain_lag_1": 0.0,
+        "rain_lag_3": 0.0,
+        "rain_lag_7": 0.0,
+    }
+
+    row = row.reindex(columns=metadata["feature_cols"])
+    row = row.fillna(lag_fill_defaults)
 
     predictions = {target: float(models[target].predict(row)[0]) for target in metadata["target_cols"]}
 
-    # keep the three values in a sensible order for display
     if predictions["min_temp"] > predictions["avg_temp"]:
         predictions["min_temp"] = predictions["avg_temp"]
     if predictions["max_temp"] < predictions["avg_temp"]:
