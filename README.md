@@ -44,8 +44,8 @@ data_analysis/            EDA + model training + benchmarking (Jupyter)
 
 The frontend is a static site (GitHub Pages can't run Python), so predictions
 are served by a small FastAPI backend hosted separately on Render. If that
-backend is ever unreachable, the page falls back to an offline
-climatology-based estimate so it still works.
+backend is unreachable, the prediction button shows an error instead of
+returning a substitute estimate.
 
 ## Tech stack
 
@@ -92,7 +92,7 @@ npm install
 npm run serve      # serves docs/ at http://localhost:8080
 ```
 
-**API** (optional — without it, predictions fall back to an offline estimate):
+**API** (required for predictions — the frontend calls `POST /predict`):
 
 ```bash
 cd api
@@ -124,7 +124,8 @@ and [`api/models/metadata.json`](api/models/metadata.json) for the full numbers)
   features — no API key required.
 - The Render free plan spins the API down after 15 minutes of inactivity, so
   the first prediction after a while can take 30-50 seconds ("cold start").
-  The UI handles this gracefully with a loading hint and an offline fallback.
+  The UI shows a loading hint while waiting; if the API is still unavailable,
+  prediction fails with an error message.
 - `india_weather_rainfall_data.xlsx` (~62 MB) is the original raw dataset,
   included for full reproducibility of the analysis.
 

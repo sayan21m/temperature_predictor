@@ -112,7 +112,6 @@ function showToast(message, type = 'info') {
 // Domain helpers
 // ---------------------------------------------------------------------------
 
-const TARGET_COLS = ['avg_temp', 'min_temp', 'max_temp'];
 const FEATURE_COLS = ['rainfall', 'wind_speed', 'air_pressure'];
 
 const MONTH_NAMES = [
@@ -157,38 +156,6 @@ function resolveClimatology(data, stateName, districtName, stationName, season) 
     }
     if (districtData) return { data: districtData, level: `${districtName} district average` };
     return { data: stateData, level: `${stateName} state average` };
-}
-
-function corrBetween(data, a, b) {
-    const cols = data.corr.columns;
-    const i = cols.indexOf(a);
-    const j = cols.indexOf(b);
-    if (i === -1 || j === -1) return 0;
-    return data.corr.values[i][j];
-}
-
-function getStatsRow(data, indexName) {
-    return data.stats.find((row) => row.index === indexName) || {};
-}
-
-function predictTemperatures(data, climatology, inputs) {
-    const std = getStatsRow(data, 'std');
-    const result = {};
-
-    for (const target of TARGET_COLS) {
-        let value = climatology[target];
-        for (const feature of FEATURE_COLS) {
-            const corr = corrBetween(data, target, feature);
-            const slope = std[feature] ? corr * (std[target] / std[feature]) : 0;
-            value += slope * (inputs[feature] - climatology[feature]);
-        }
-        result[target] = value;
-    }
-
-    if (result.min_temp > result.avg_temp) result.min_temp = result.avg_temp;
-    if (result.max_temp < result.avg_temp) result.max_temp = result.avg_temp;
-
-    return result;
 }
 
 function guessCityFromStation(stationName) {
@@ -688,17 +655,22 @@ async function main() {
         let predicted;
         try {
             predicted = await predictViaApi(inputs);
-            predictionSourceNote.textContent = 'Predicted using our trained machine learning model.';
-            showToast('Prediction ready.', 'success');
-        } catch {
-            predicted = predictTemperatures(data, climatology, inputs);
-            predictionSourceNote.textContent = 'Predicted using seasonal climate normals (estimate).';
-            showToast('Prediction ready.', 'success');
+        } catch (err) {
+            resultsSection.classList.add('hidden');
+            predictionSourceNote.textContent = '';
+            const message = err.name === 'AbortError'
+                ? 'Prediction timed out. The model API may be waking up — try again in a moment.'
+                : `Prediction failed: ${err.message}`;
+            showToast(message, 'error');
+            return;
         } finally {
             clearTimeout(wakingUpTimer);
             predictBtn.disabled = false;
             predictBtn.textContent = 'Predict temperature';
         }
+
+        predictionSourceNote.textContent = 'Predicted using our trained machine learning model.';
+        showToast('Prediction ready.', 'success');
 
         avgTempResult.textContent = `${predicted.avg_temp.toFixed(1)} °C`;
         minTempResult.textContent = `${predicted.min_temp.toFixed(1)} °C`;

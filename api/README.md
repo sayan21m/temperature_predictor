@@ -1,10 +1,9 @@
 # Temperature Predictor API
 
-A small FastAPI server that loads the real trained models (pickled with
-`joblib`) and serves predictions to `docs/prediction.html`. This exists
-because a static GitHub Pages site can't run a Python model on its own —
-the JS-only fallback in `docs/prediction.js` is a statistical approximation,
-not the trained model.
+A small FastAPI server that loads the trained models (pickled with
+`joblib`) and serves predictions to `docs/prediction.html`. The static
+GitHub Pages frontend calls this API because it cannot run Python models
+locally.
 
 ## Setup
 
@@ -92,7 +91,7 @@ redeploy step needed.
 > of inactivity. The first request after that ("cold start") can take
 > 30-50 seconds. `docs/prediction.js` already uses a generous 45s timeout
 > and shows a "Waking up model…" hint on the predict button, then falls
-> back to the offline estimate if it's still not ready. Upgrade to a paid
+> back with an error if it is still not ready. Upgrade to a paid
 > instance type to avoid cold starts entirely.
 
 ### Locking down CORS (optional but recommended)
@@ -115,10 +114,9 @@ Open `docs/prediction.js` and update the constant near the top of the file:
 const PREDICTION_API_BASE_URL = 'https://your-service-name.onrender.com';
 ```
 
-The frontend never shows this URL (or any API key) in the UI — predictions
-happen automatically and silently against this backend. If it's ever
-unreachable, the page falls back to an offline seasonal-normal estimate
-without exposing any technical details to the visitor.
+The frontend never shows this URL in the UI. Predictions are served only
+from this backend; if the API is unreachable, the page shows an error and
+does not return a substitute prediction.
 
 ## API
 
