@@ -8,6 +8,8 @@ to a FastAPI backend on Render.
 
 **Live demo:** [sayan21m.github.io/temperature_predictor](https://sayan21m.github.io/temperature_predictor/) · [Prediction tool](https://sayan21m.github.io/temperature_predictor/prediction.html)
 
+**Developer docs:** [DEVELOPMENT.md](DEVELOPMENT.md) — full architecture, training, API, frontend, deployment, and extension guide (export to PDF via Pandoc or your editor).
+
 ## What this project does
 
 1. **Explores** ~400 weather stations across India (temperature, rainfall,
